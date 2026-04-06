@@ -1,10 +1,87 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+
+const THEMES = {
+  dark: {
+    appBg: "linear-gradient(180deg, #060a08, #0b120f, #08100d)",
+    cardBg: "linear-gradient(160deg, #0f1512, #171d19)",
+    modalBg: "linear-gradient(160deg, #0f1713, #18211c)",
+    brandGradient: "linear-gradient(135deg, #18C37D, #6EE7B7)",
+    accentGradient: "linear-gradient(135deg, #17B26A, #34D399)",
+    accentTint: "#18C37D18",
+    accentTintStrong: "#18C37D22",
+    accentBorder: "#18C37D55",
+    accentGlow: "#18C37D44",
+    activeTabBg: "linear-gradient(135deg, #18C37D22, #6EE7B714)",
+    surface: "#FFFFFF06",
+    surfaceStrong: "#FFFFFF08",
+    headerSurface: "#FFFFFF05",
+    line: "#FFFFFF08",
+    lineSoft: "#FFFFFF0A",
+    lineStrong: "#FFFFFF15",
+    track: "#161D19",
+    text: "#FFFFFF",
+    textStrong: "#FFFFFFCC",
+    textMuted: "#FFFFFFAA",
+    textDim: "#FFFFFF77",
+    textSoft: "#FFFFFF55",
+    textFaint: "#FFFFFF33",
+    titleGradient: "linear-gradient(90deg, #FFFFFF, #FFFFFF88)",
+    pillText: "#8EF0C0",
+    modalButtonBg: "#FFFFFF15",
+    summaryText: "#FFFFFFBB",
+    timelineLine: "#FFFFFF18",
+    timelineHomeDot: "#FFFFFF44",
+    timelineAwayDot: "#FFFFFF22",
+    timelineDotBorder: "#FFFFFF33",
+    vsGhost: "#FFFFFF22",
+    cardShadow: "0 8px 40px #00000044",
+    modalShadow: "0 24px 80px #00000088",
+    overlay: "#020403CC",
+  },
+  light: {
+    appBg: "linear-gradient(180deg, #F2F5F3, #EDF2EF, #F7F9F8)",
+    cardBg: "linear-gradient(160deg, #FFFFFF, #F7FAF8)",
+    modalBg: "linear-gradient(160deg, #FFFFFF, #F8FBF9)",
+    brandGradient: "linear-gradient(135deg, #17B26A, #52D69B)",
+    accentGradient: "linear-gradient(135deg, #17B26A, #34D399)",
+    accentTint: "rgba(23, 178, 106, 0.10)",
+    accentTintStrong: "rgba(23, 178, 106, 0.18)",
+    accentBorder: "rgba(23, 178, 106, 0.35)",
+    accentGlow: "rgba(23, 178, 106, 0.18)",
+    activeTabBg: "linear-gradient(135deg, rgba(23, 178, 106, 0.10), rgba(82, 214, 155, 0.06))",
+    surface: "#F4F7F5",
+    surfaceStrong: "#F7FAF8",
+    headerSurface: "#F8FBF9",
+    line: "#DCE5E0",
+    lineSoft: "#E7EEEA",
+    lineStrong: "#CDD8D2",
+    track: "#ECF2EE",
+    text: "#111815",
+    textStrong: "#23302A",
+    textMuted: "#33413B",
+    textDim: "#66746E",
+    textSoft: "#87948E",
+    textFaint: "#A0ACA6",
+    titleGradient: "linear-gradient(90deg, #111815, #5F6F68)",
+    pillText: "#0E8F59",
+    modalButtonBg: "#E7EEEA",
+    summaryText: "#46534D",
+    timelineLine: "#D8E1DC",
+    timelineHomeDot: "#D1DBD5",
+    timelineAwayDot: "#E8EFEB",
+    timelineDotBorder: "#C7D1CC",
+    vsGhost: "#D7E1DC",
+    cardShadow: "0 10px 32px rgba(15, 23, 21, 0.08)",
+    modalShadow: "0 24px 64px rgba(15, 23, 21, 0.16)",
+    overlay: "rgba(11, 16, 13, 0.20)",
+  },
+};
 
 const MATCHES = [
   {
     id: 1,
     league: "Premier League",
-    leagueIcon: "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+    leagueIcon: "🏴",
     matchday: "Matchday 34",
     date: "Sat, Apr 11 · 20:30",
     venue: "Anfield, Liverpool",
@@ -140,7 +217,6 @@ const MATCHES = [
   },
 ];
 
-// -- tiny helpers --
 const lerp = (a, b, t) => a + (b - a) * t;
 const fatigueColor = (v) =>
   v > 65 ? "#EF4444" : v > 45 ? "#F59E0B" : "#22C55E";
@@ -149,19 +225,28 @@ const fatigueLabel = (v) =>
 const levelColor = (l) =>
   l === "high" ? "#EF4444" : l === "medium" ? "#F59E0B" : "#22C55E";
 
-// ── AnimatedNumber ──
 function AnimatedNumber({ value, suffix = "", duration = 1200 }) {
   const [display, setDisplay] = useState(0);
+
   useEffect(() => {
     let start = null;
+
     const step = (ts) => {
-      if (!start) start = ts;
-      const p = Math.min((ts - start) / duration, 1);
-      setDisplay(Math.round(lerp(0, value, p)));
-      if (p < 1) requestAnimationFrame(step);
+      if (!start) {
+        start = ts;
+      }
+
+      const progress = Math.min((ts - start) / duration, 1);
+      setDisplay(Math.round(lerp(0, value, progress)));
+
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      }
     };
+
     requestAnimationFrame(step);
   }, [value, duration]);
+
   return (
     <span>
       {display}
@@ -170,14 +255,16 @@ function AnimatedNumber({ value, suffix = "", duration = 1200 }) {
   );
 }
 
-// ── Battery / Energy Bar ──
-function EnergyBar({ value, color, delay = 0 }) {
+function EnergyBar({ value, delay = 0, theme }) {
   const [width, setWidth] = useState(0);
+
   useEffect(() => {
-    const t = setTimeout(() => setWidth(100 - value), delay);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setWidth(100 - value), delay);
+    return () => clearTimeout(timer);
   }, [value, delay]);
+
   const bg = fatigueColor(value);
+
   return (
     <div
       style={{
@@ -185,9 +272,9 @@ function EnergyBar({ value, color, delay = 0 }) {
         width: "100%",
         height: 32,
         borderRadius: 8,
-        background: "#1a1a2e",
+        background: theme.track,
         overflow: "hidden",
-        border: "1px solid #ffffff12",
+        border: `1px solid ${theme.lineStrong}`,
       }}
     >
       <div
@@ -197,7 +284,7 @@ function EnergyBar({ value, color, delay = 0 }) {
           top: 0,
           height: "100%",
           width: `${width}%`,
-          background: `linear-gradient(90deg, ${bg}dd, ${bg}88)`,
+          background: `linear-gradient(90deg, ${bg}DD, ${bg}88)`,
           borderRadius: 8,
           transition: "width 1.2s cubic-bezier(.4,0,.2,1)",
         }}
@@ -211,7 +298,7 @@ function EnergyBar({ value, color, delay = 0 }) {
           justifyContent: "center",
           fontSize: 13,
           fontWeight: 700,
-          color: "#fff",
+          color: theme.text,
           letterSpacing: 1,
           textShadow: "0 1px 4px #0008",
         }}
@@ -222,8 +309,7 @@ function EnergyBar({ value, color, delay = 0 }) {
   );
 }
 
-// ── Momentum Dots ──
-function MomentumDots({ data, results, labels, color }) {
+function MomentumDots({ data, results, labels, theme }) {
   return (
     <div
       style={{
@@ -234,12 +320,13 @@ function MomentumDots({ data, results, labels, color }) {
         padding: "0 4px",
       }}
     >
-      {data.map((v, i) => {
-        const h = v === 3 ? 48 : v === 1 ? 28 : 14;
-        const bg = v === 3 ? "#22C55E" : v === 1 ? "#F59E0B" : "#EF4444";
+      {data.map((value, index) => {
+        const height = value === 3 ? 48 : value === 1 ? 28 : 14;
+        const bg = value === 3 ? "#22C55E" : value === 1 ? "#F59E0B" : "#EF4444";
+
         return (
           <div
-            key={i}
+            key={index}
             style={{
               display: "flex",
               flexDirection: "column",
@@ -256,28 +343,28 @@ function MomentumDots({ data, results, labels, color }) {
                 opacity: 0.9,
               }}
             >
-              {results[i]}
+              {results[index]}
             </div>
             <div
               style={{
                 width: "100%",
                 maxWidth: 32,
-                height: h,
+                height,
                 borderRadius: 6,
-                background: `linear-gradient(180deg, ${bg}cc, ${bg}44)`,
+                background: `linear-gradient(180deg, ${bg}CC, ${bg}44)`,
                 transition: "height 0.8s cubic-bezier(.4,0,.2,1)",
-                transitionDelay: `${i * 100}ms`,
+                transitionDelay: `${index * 100}ms`,
               }}
             />
             <div
               style={{
                 fontSize: 8,
-                color: "#ffffff66",
+                color: theme.textDim,
                 whiteSpace: "nowrap",
                 letterSpacing: 0.3,
               }}
             >
-              {labels[i]}
+              {labels[index]}
             </div>
           </div>
         );
@@ -286,11 +373,11 @@ function MomentumDots({ data, results, labels, color }) {
   );
 }
 
-// ── Schedule Timeline ──
-function ScheduleTimeline({ schedule, color }) {
-  const minDay = Math.min(...schedule.map((s) => s.day));
-  const maxDay = Math.max(...schedule.map((s) => s.day));
+function ScheduleTimeline({ schedule, color, theme }) {
+  const minDay = Math.min(...schedule.map((item) => item.day));
+  const maxDay = Math.max(...schedule.map((item) => item.day));
   const range = maxDay - minDay || 1;
+
   return (
     <div style={{ position: "relative", height: 56, margin: "8px 0" }}>
       <div
@@ -300,16 +387,17 @@ function ScheduleTimeline({ schedule, color }) {
           left: 16,
           right: 16,
           height: 2,
-          background: "#ffffff18",
+          background: theme.timelineLine,
           borderRadius: 1,
         }}
       />
-      {schedule.map((s, i) => {
-        const left = ((s.day - minDay) / range) * 100;
-        const isCurrent = s.current;
+      {schedule.map((item, index) => {
+        const left = ((item.day - minDay) / range) * 100;
+        const isCurrent = item.current;
+
         return (
           <div
-            key={i}
+            key={index}
             style={{
               position: "absolute",
               left: `calc(${left}% )`,
@@ -324,12 +412,12 @@ function ScheduleTimeline({ schedule, color }) {
             <div
               style={{
                 fontSize: 8,
-                color: isCurrent ? "#fff" : "#ffffff55",
+                color: isCurrent ? theme.text : theme.textSoft,
                 fontWeight: isCurrent ? 800 : 500,
                 letterSpacing: 0.5,
               }}
             >
-              {s.comp}
+              {item.comp}
             </div>
             <div
               style={{
@@ -338,10 +426,10 @@ function ScheduleTimeline({ schedule, color }) {
                 borderRadius: "50%",
                 background: isCurrent
                   ? color
-                  : s.home
-                    ? "#ffffff44"
-                    : "#ffffff22",
-                border: isCurrent ? "2px solid #fff" : "1px solid #ffffff33",
+                  : item.home
+                    ? theme.timelineHomeDot
+                    : theme.timelineAwayDot,
+                border: isCurrent ? `2px solid ${theme.text}` : `1px solid ${theme.timelineDotBorder}`,
                 boxShadow: isCurrent ? `0 0 12px ${color}88` : "none",
                 transition: "all 0.5s",
               }}
@@ -349,15 +437,15 @@ function ScheduleTimeline({ schedule, color }) {
             <div
               style={{
                 fontSize: 9,
-                color: isCurrent ? "#fff" : "#ffffff66",
+                color: isCurrent ? theme.text : theme.textDim,
                 fontWeight: isCurrent ? 700 : 400,
               }}
             >
-              {s.opponent}
+              {item.opponent}
             </div>
             {!isCurrent && (
-              <div style={{ fontSize: 7, color: "#ffffff33" }}>
-                {s.day > 0 ? `+${s.day}d` : `${s.day}d`}
+              <div style={{ fontSize: 7, color: theme.textFaint }}>
+                {item.day > 0 ? `+${item.day}d` : `${item.day}d`}
               </div>
             )}
           </div>
@@ -367,8 +455,7 @@ function ScheduleTimeline({ schedule, color }) {
   );
 }
 
-// ── Team Panel ──
-function TeamPanel({ team, side }) {
+function TeamPanel({ team, side, theme }) {
   return (
     <div
       style={{
@@ -379,7 +466,6 @@ function TeamPanel({ team, side }) {
         minWidth: 0,
       }}
     >
-      {/* Header */}
       <div
         style={{
           display: "flex",
@@ -408,19 +494,18 @@ function TeamPanel({ team, side }) {
             style={{
               fontSize: 18,
               fontWeight: 800,
-              color: "#fff",
+              color: theme.text,
               letterSpacing: -0.5,
             }}
           >
             {team.name}
           </div>
-          <div style={{ fontSize: 11, color: "#ffffff55", letterSpacing: 1 }}>
+          <div style={{ fontSize: 11, color: theme.textSoft, letterSpacing: 1 }}>
             {side === "home" ? "主场" : "客场"}
           </div>
         </div>
       </div>
 
-      {/* Fatigue */}
       <div>
         <div
           style={{
@@ -429,7 +514,7 @@ function TeamPanel({ team, side }) {
             marginBottom: 6,
           }}
         >
-          <span style={{ fontSize: 11, color: "#ffffff77", fontWeight: 600 }}>
+          <span style={{ fontSize: 11, color: theme.textDim, fontWeight: 600 }}>
             ⚡ 疲劳指数
           </span>
           <span
@@ -442,10 +527,9 @@ function TeamPanel({ team, side }) {
             <AnimatedNumber value={team.fatigue} suffix="/100" />
           </span>
         </div>
-        <EnergyBar value={team.fatigue} color={team.color} delay={300} />
+        <EnergyBar value={team.fatigue} delay={300} theme={theme} />
       </div>
 
-      {/* Quick Stats */}
       <div style={{ display: "flex", gap: 8 }}>
         {[
           {
@@ -481,49 +565,48 @@ function TeamPanel({ team, side }) {
                   ? "#F59E0B"
                   : "#EF4444",
           },
-        ].map((s, i) => (
+        ].map((stat, index) => (
           <div
-            key={i}
+            key={index}
             style={{
               flex: 1,
-              background: "#ffffff08",
+              background: theme.surfaceStrong,
               borderRadius: 10,
               padding: "10px 8px",
               textAlign: "center",
-              border: "1px solid #ffffff0a",
+              border: `1px solid ${theme.lineSoft}`,
             }}
           >
-            <div style={{ fontSize: 16 }}>{s.icon}</div>
+            <div style={{ fontSize: 16 }}>{stat.icon}</div>
             <div
               style={{
                 fontSize: 16,
                 fontWeight: 800,
-                color: s.color,
+                color: stat.color,
                 marginTop: 4,
               }}
             >
-              {s.value}
+              {stat.value}
             </div>
             <div
               style={{
                 fontSize: 9,
-                color: "#ffffff55",
+                color: theme.textSoft,
                 marginTop: 2,
                 letterSpacing: 0.3,
               }}
             >
-              {s.label}
+              {stat.label}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Momentum */}
       <div>
         <div
           style={{
             fontSize: 11,
-            color: "#ffffff77",
+            color: theme.textDim,
             fontWeight: 600,
             marginBottom: 8,
           }}
@@ -534,16 +617,15 @@ function TeamPanel({ team, side }) {
           data={team.momentum}
           results={team.recentResults}
           labels={team.momentumLabels}
-          color={team.color}
+          theme={theme}
         />
       </div>
 
-      {/* Key Fatigued Players */}
       <div>
         <div
           style={{
             fontSize: 11,
-            color: "#ffffff77",
+            color: theme.textDim,
             fontWeight: 600,
             marginBottom: 8,
           }}
@@ -551,17 +633,17 @@ function TeamPanel({ team, side }) {
           🏃 关键球员负荷
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {team.keyFatigued.map((p, i) => (
+          {team.keyFatigued.map((player, index) => (
             <div
-              key={i}
+              key={index}
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
-                background: "#ffffff06",
+                background: theme.surface,
                 borderRadius: 8,
                 padding: "8px 10px",
-                border: `1px solid ${levelColor(p.level)}22`,
+                border: `1px solid ${levelColor(player.level)}22`,
               }}
             >
               <div
@@ -569,8 +651,8 @@ function TeamPanel({ team, side }) {
                   width: 8,
                   height: 8,
                   borderRadius: "50%",
-                  background: levelColor(p.level),
-                  boxShadow: `0 0 6px ${levelColor(p.level)}66`,
+                  background: levelColor(player.level),
+                  boxShadow: `0 0 6px ${levelColor(player.level)}66`,
                   flexShrink: 0,
                 }}
               />
@@ -578,27 +660,27 @@ function TeamPanel({ team, side }) {
                 <div
                   style={{
                     fontSize: 12,
-                    color: "#ffffffcc",
+                    color: theme.textStrong,
                     fontWeight: 600,
                   }}
                 >
-                  {p.name}
+                  {player.name}
                 </div>
-                <div style={{ fontSize: 9, color: "#ffffff44" }}>
-                  {p.age}岁 · 近14天{p.mins}分钟
+                <div style={{ fontSize: 9, color: theme.textFaint }}>
+                  {player.age}岁 · 近14天{player.mins}分钟
                 </div>
               </div>
               <div
                 style={{
                   fontSize: 10,
-                  color: levelColor(p.level),
+                  color: levelColor(player.level),
                   fontWeight: 700,
                   flexShrink: 0,
                 }}
               >
-                {p.level === "high"
+                {player.level === "high"
                   ? "⚠️ 高负荷"
-                  : p.level === "medium"
+                  : player.level === "medium"
                     ? "中等"
                     : "✅ 充沛"}
               </div>
@@ -607,13 +689,12 @@ function TeamPanel({ team, side }) {
         </div>
       </div>
 
-      {/* Absent Players */}
       {team.keyAbsent.length > 0 && (
         <div>
           <div
             style={{
               fontSize: 11,
-              color: "#ffffff77",
+              color: theme.textDim,
               fontWeight: 600,
               marginBottom: 6,
             }}
@@ -621,52 +702,50 @@ function TeamPanel({ team, side }) {
             🚑 缺阵球员
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {team.keyAbsent.map((p, i) => (
+            {team.keyAbsent.map((player, index) => (
               <span
-                key={i}
+                key={index}
                 style={{
                   fontSize: 10,
-                  color: "#EF4444cc",
+                  color: "#EF4444CC",
                   background: "#EF444418",
                   padding: "3px 8px",
                   borderRadius: 6,
                   fontWeight: 600,
                 }}
               >
-                ✕ {p}
+                ✕ {player}
               </span>
             ))}
           </div>
         </div>
       )}
 
-      {/* Schedule Timeline */}
       <div>
         <div
           style={{
             fontSize: 11,
-            color: "#ffffff77",
+            color: theme.textDim,
             fontWeight: 600,
             marginBottom: 4,
           }}
         >
           🗓 赛程时间轴
         </div>
-        <ScheduleTimeline schedule={team.schedule} color={team.color} />
+        <ScheduleTimeline schedule={team.schedule} color={team.color} theme={theme} />
       </div>
     </div>
   );
 }
 
-// ── AI Summary Modal ──
-function AISummary({ match, onClose }) {
+function AISummary({ match, onClose, theme }) {
   return (
     <div
       onClick={onClose}
       style={{
         position: "fixed",
         inset: 0,
-        background: "#000000cc",
+        background: theme.overlay,
         backdropFilter: "blur(8px)",
         display: "flex",
         alignItems: "center",
@@ -676,15 +755,15 @@ function AISummary({ match, onClose }) {
       }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
         style={{
-          background: "linear-gradient(160deg, #0f0f23, #1a1a35)",
+          background: theme.modalBg,
           borderRadius: 20,
           padding: 28,
           maxWidth: 600,
           width: "100%",
-          border: "1px solid #ffffff15",
-          boxShadow: "0 24px 80px #00000088",
+          border: `1px solid ${theme.lineStrong}`,
+          boxShadow: theme.modalShadow,
         }}
       >
         <div
@@ -699,7 +778,7 @@ function AISummary({ match, onClose }) {
             style={{
               fontSize: 14,
               fontWeight: 700,
-              color: "#fff",
+              color: theme.text,
               letterSpacing: 0.5,
             }}
           >
@@ -708,10 +787,10 @@ function AISummary({ match, onClose }) {
           <button
             onClick={onClose}
             style={{
-              background: "#ffffff15",
+              background: theme.modalButtonBg,
               border: "none",
               borderRadius: 8,
-              color: "#fff",
+              color: theme.text,
               width: 28,
               height: 28,
               cursor: "pointer",
@@ -740,11 +819,11 @@ function AISummary({ match, onClose }) {
         <p
           style={{
             fontSize: 13,
-            color: "#ffffffbb",
+            color: theme.summaryText,
             lineHeight: 1.7,
             margin: "0 0 20px 0",
             padding: "12px 14px",
-            background: `${match.home.color}0a`,
+            background: `${match.home.color}0A`,
             borderRadius: 10,
             borderLeft: `3px solid ${match.home.color}66`,
           }}
@@ -770,11 +849,11 @@ function AISummary({ match, onClose }) {
         <p
           style={{
             fontSize: 13,
-            color: "#ffffffbb",
+            color: theme.summaryText,
             lineHeight: 1.7,
             margin: 0,
             padding: "12px 14px",
-            background: `${match.away.color}0a`,
+            background: `${match.away.color}0A`,
             borderRadius: 10,
             borderLeft: `3px solid ${match.away.color}66`,
           }}
@@ -786,7 +865,7 @@ function AISummary({ match, onClose }) {
           style={{
             marginTop: 20,
             fontSize: 10,
-            color: "#ffffff33",
+            color: theme.textFaint,
             textAlign: "center",
           }}
         >
@@ -797,11 +876,11 @@ function AISummary({ match, onClose }) {
   );
 }
 
-// ── VS Badge ──
-function VSBadge({ home, away }) {
+function VSBadge({ home, away, theme }) {
   const diff = home.fatigue - away.fatigue;
   const advantage =
     Math.abs(diff) < 10 ? "势均力敌" : diff > 0 ? `${away.short}体能占优` : `${home.short}体能占优`;
+
   return (
     <div
       style={{
@@ -817,7 +896,7 @@ function VSBadge({ home, away }) {
         style={{
           fontSize: 22,
           fontWeight: 900,
-          color: "#ffffff22",
+          color: theme.vsGhost,
           letterSpacing: 4,
         }}
       >
@@ -826,12 +905,13 @@ function VSBadge({ home, away }) {
       <div
         style={{
           fontSize: 9,
-          color: "#ffffff55",
-          background: "#ffffff0a",
+          color: "#D2F8E4",
+          background: theme.accentTint,
           padding: "3px 8px",
           borderRadius: 20,
           whiteSpace: "nowrap",
           fontWeight: 600,
+          border: `1px solid ${theme.accentTintStrong}`,
         }}
       >
         {advantage}
@@ -840,29 +920,28 @@ function VSBadge({ home, away }) {
   );
 }
 
-// ── Match Card ──
-function MatchCard({ match }) {
+function MatchCard({ match, theme }) {
   const [showAI, setShowAI] = useState(false);
+
   return (
     <>
       <div
         style={{
-          background: "linear-gradient(160deg, #0d0d1f, #141428)",
+          background: theme.cardBg,
           borderRadius: 24,
-          border: "1px solid #ffffff0c",
+          border: `1px solid ${theme.lineSoft}`,
           overflow: "hidden",
-          boxShadow: "0 8px 40px #00000044",
+          boxShadow: theme.cardShadow,
         }}
       >
-        {/* Match Header */}
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
             padding: "16px 24px",
-            background: "#ffffff06",
-            borderBottom: "1px solid #ffffff08",
+            background: theme.headerSurface,
+            borderBottom: `1px solid ${theme.line}`,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -871,34 +950,33 @@ function MatchCard({ match }) {
               style={{
                 fontSize: 12,
                 fontWeight: 700,
-                color: "#ffffffaa",
+                color: theme.textMuted,
                 letterSpacing: 0.5,
               }}
             >
               {match.league}
             </span>
-            <span style={{ fontSize: 10, color: "#ffffff44" }}>
+            <span style={{ fontSize: 10, color: theme.textFaint }}>
               · {match.matchday}
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 11, color: "#ffffff66" }}>
+            <span style={{ fontSize: 11, color: theme.textDim }}>
               {match.date}
             </span>
             <button
               onClick={() => setShowAI(true)}
               style={{
-                background:
-                  "linear-gradient(135deg, #6366F1, #8B5CF6)",
+                background: theme.accentGradient,
                 border: "none",
                 borderRadius: 8,
                 padding: "5px 12px",
                 fontSize: 11,
                 fontWeight: 700,
-                color: "#fff",
+                color: theme.text,
                 cursor: "pointer",
                 letterSpacing: 0.3,
-                boxShadow: "0 2px 12px #6366F144",
+                boxShadow: `0 2px 12px ${theme.accentGlow}`,
               }}
             >
               🤖 AI 分析
@@ -906,20 +984,18 @@ function MatchCard({ match }) {
           </div>
         </div>
 
-        {/* Venue */}
         <div
           style={{
             textAlign: "center",
             padding: "8px 0 4px",
             fontSize: 10,
-            color: "#ffffff33",
+            color: theme.textFaint,
             letterSpacing: 0.5,
           }}
         >
           📍 {match.venue}
         </div>
 
-        {/* Two columns */}
         <div
           style={{
             display: "flex",
@@ -928,39 +1004,41 @@ function MatchCard({ match }) {
             alignItems: "flex-start",
           }}
         >
-          <TeamPanel team={match.home} side="home" />
-          <VSBadge home={match.home} away={match.away} />
-          <TeamPanel team={match.away} side="away" />
+          <TeamPanel team={match.home} side="home" theme={theme} />
+          <VSBadge home={match.home} away={match.away} theme={theme} />
+          <TeamPanel team={match.away} side="away" theme={theme} />
         </div>
       </div>
 
-      {showAI && <AISummary match={match} onClose={() => setShowAI(false)} />}
+      {showAI && <AISummary match={match} onClose={() => setShowAI(false)} theme={theme} />}
     </>
   );
 }
 
-// ── Main App ──
 export default function SonarFC() {
   const [activeMatch, setActiveMatch] = useState(0);
+  const [themeMode, setThemeMode] = useState("dark");
+  const theme = THEMES[themeMode];
+
   return (
     <div
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #06060f, #0a0a1a, #08081a)",
+        background: theme.appBg,
         fontFamily:
           "'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-        color: "#fff",
+        color: theme.text,
         padding: "0 0 40px 0",
       }}
     >
-      {/* Top Bar */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           padding: "20px 32px",
-          borderBottom: "1px solid #ffffff08",
+          borderBottom: `1px solid ${theme.line}`,
+          gap: 16,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -969,7 +1047,7 @@ export default function SonarFC() {
               width: 32,
               height: 32,
               borderRadius: 10,
-              background: "linear-gradient(135deg, #6366F1, #EC4899)",
+              background: theme.brandGradient,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -983,7 +1061,7 @@ export default function SonarFC() {
               fontSize: 20,
               fontWeight: 900,
               letterSpacing: -0.5,
-              background: "linear-gradient(90deg, #fff, #ffffff88)",
+              background: theme.titleGradient,
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
             }}
@@ -993,23 +1071,71 @@ export default function SonarFC() {
           <span
             style={{
               fontSize: 9,
-              color: "#6366F1",
-              background: "#6366F118",
+              color: theme.pillText,
+              background: theme.accentTint,
               padding: "2px 8px",
               borderRadius: 20,
               fontWeight: 700,
               letterSpacing: 1,
+              border: `1px solid ${theme.accentTintStrong}`,
             }}
           >
             BETA
           </span>
         </div>
-        <div style={{ fontSize: 12, color: "#ffffff44" }}>
-          赛前状态探测 · Pre-match Condition Sonar
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
+          <div style={{ fontSize: 12, color: theme.textFaint }}>
+            赛前状态探测 · Pre-match Condition Sonar
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              padding: 3,
+              borderRadius: 999,
+              background: theme.surfaceStrong,
+              border: `1px solid ${theme.lineSoft}`,
+            }}
+          >
+            {[
+              { id: "dark", label: "深色" },
+              { id: "light", label: "浅色" },
+            ].map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setThemeMode(item.id)}
+                style={{
+                  border: "none",
+                  borderRadius: 999,
+                  padding: "6px 10px",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background:
+                    themeMode === item.id ? theme.accentGradient : "transparent",
+                  color: themeMode === item.id ? theme.text : theme.textDim,
+                  boxShadow:
+                    themeMode === item.id
+                      ? `0 2px 10px ${theme.accentGlow}`
+                      : "none",
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Match Tabs */}
       <div
         style={{
           display: "flex",
@@ -1018,19 +1144,19 @@ export default function SonarFC() {
           overflowX: "auto",
         }}
       >
-        {MATCHES.map((m, i) => (
+        {MATCHES.map((match, index) => (
           <button
-            key={m.id}
-            onClick={() => setActiveMatch(i)}
+            key={match.id}
+            onClick={() => setActiveMatch(index)}
             style={{
               background:
-                activeMatch === i
-                  ? "linear-gradient(135deg, #6366F133, #8B5CF622)"
-                  : "#ffffff08",
+                activeMatch === index
+                  ? theme.activeTabBg
+                  : theme.surfaceStrong,
               border:
-                activeMatch === i
-                  ? "1px solid #6366F155"
-                  : "1px solid #ffffff0a",
+                activeMatch === index
+                  ? `1px solid ${theme.accentBorder}`
+                  : `1px solid ${theme.lineSoft}`,
               borderRadius: 12,
               padding: "10px 16px",
               cursor: "pointer",
@@ -1041,46 +1167,40 @@ export default function SonarFC() {
               transition: "all 0.3s",
             }}
           >
-            <span style={{ fontSize: 14 }}>
-              {m.home.badge}
-            </span>
+            <span style={{ fontSize: 14 }}>{match.home.badge}</span>
             <span
               style={{
                 fontSize: 12,
                 fontWeight: 700,
-                color: activeMatch === i ? "#fff" : "#ffffff66",
+                color: activeMatch === index ? theme.text : theme.textDim,
               }}
             >
-              {m.home.short} vs {m.away.short}
+              {match.home.short} vs {match.away.short}
             </span>
-            <span style={{ fontSize: 14 }}>
-              {m.away.badge}
-            </span>
+            <span style={{ fontSize: 14 }}>{match.away.badge}</span>
             <span
               style={{
                 fontSize: 9,
-                color: "#ffffff44",
+                color: theme.textFaint,
                 marginLeft: 4,
               }}
             >
-              {m.leagueIcon} {m.league}
+              {match.leagueIcon} {match.league}
             </span>
           </button>
         ))}
       </div>
 
-      {/* Active Match */}
       <div style={{ padding: "0 32px", maxWidth: 1100, margin: "0 auto" }}>
-        <MatchCard match={MATCHES[activeMatch]} />
+        <MatchCard match={MATCHES[activeMatch]} theme={theme} />
       </div>
 
-      {/* Footer */}
       <div
         style={{
           textAlign: "center",
           marginTop: 32,
           fontSize: 10,
-          color: "#ffffff22",
+          color: theme.textFaint,
           letterSpacing: 0.5,
         }}
       >
