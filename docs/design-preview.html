@@ -4449,6 +4449,21 @@
   <div class="match-detail-header" style="display:flex;align-items:center;gap:16px;text-align:left;padding:24px">
     <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/40.png" style="width:48px;height:48px;object-fit:contain">
     <div><div style="font-size:20px;font-weight:800">Liverpool</div><div style="font-size:13px;color:var(--text-muted)">2025/26 赛程</div></div>
+    <div style="margin-left:auto;text-align:right">
+      <div style="font-size:11px;color:var(--text-light)">赛季战绩</div>
+      <div style="display:flex;gap:3px;margin-top:4px">
+        <span style="width:12px;height:12px;border-radius:2px;background:var(--success)"></span>
+        <span style="width:12px;height:12px;border-radius:2px;background:var(--success)"></span>
+        <span style="width:12px;height:12px;border-radius:2px;background:var(--surface-2)"></span>
+        <span style="width:12px;height:12px;border-radius:2px;background:var(--success)"></span>
+        <span style="width:12px;height:12px;border-radius:2px;background:var(--danger)"></span>
+        <span style="width:12px;height:12px;border-radius:2px;background:var(--success)"></span>
+        <span style="width:12px;height:12px;border-radius:2px;background:var(--success)"></span>
+        <span style="width:12px;height:12px;border-radius:2px;background:var(--surface-2)"></span>
+        <span style="width:12px;height:12px;border-radius:2px;background:var(--success)"></span>
+        <span style="width:12px;height:12px;border-radius:2px;background:var(--success)"></span>
+      </div>
+    </div>
   </div>
   <div class="match-tabs">
     <button class="match-tab">概览</button>
@@ -4457,72 +4472,149 @@
     <button class="match-tab">数据</button>
     <button class="match-tab">转会</button>
   </div>
-  <div style="padding:20px">
-    <div style="display:flex;gap:6px;margin-bottom:16px">
+  <div style="padding:16px">
+    <div style="display:flex;gap:6px;margin-bottom:12px;align-items:center">
       <button class="filter-chip active">全部</button>
       <button class="filter-chip">联赛</button>
       <button class="filter-chip">杯赛</button>
       <button class="filter-chip">欧战</button>
+      <span style="margin-left:auto;font-size:11px;color:var(--text-light)">25胜 5平 3负</span>
     </div>
 
-    <!-- April Group -->
-    <div style="margin-bottom:20px">
-      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px">四月 2026</div>
-      <div style="display:flex;flex-direction:column;gap:1px">
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface);border-radius:6px 6px 0 0;border-left:3px solid #22c55e">
-          <span style="font-size:11px;color:var(--text-light);min-width:44px">Apr 5</span>
-          <span class="comp-tag league" style="font-size:9px">PL</span>
-          <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/49.png" style="width:16px;height:16px;object-fit:contain">
-          <span style="font-size:13px;flex:1">Chelsea</span>
-          <span style="font-size:13px;font-weight:700;font-variant-numeric:tabular-nums">2-1</span>
-          <span style="font-size:10px;color:var(--text-light);background:var(--surface-2);padding:1px 6px;border-radius:4px">H</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface);border-left:3px solid var(--border)">
-          <span style="font-size:11px;color:var(--primary);min-width:44px;font-weight:600">Apr 9</span>
+    <!-- NEXT MATCH highlight -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">&#9679; 下一场</div>
+      <div style="background:var(--bg);border:2px solid var(--primary);border-radius:8px;padding:10px 12px;position:relative;overflow:hidden">
+        <div style="position:absolute;top:0;left:0;right:0;height:2px;background:var(--primary)"></div>
+        <div style="display:grid;grid-template-columns:44px auto 1fr 28px 1fr 40px;align-items:center;gap:6px">
+          <div style="text-align:center">
+            <div style="font-size:10px;color:var(--text-light)">Apr 9</div>
+            <div style="font-size:12px;font-weight:700;font-family:'Geist',system-ui">21:00</div>
+          </div>
           <span class="comp-tag european" style="font-size:9px">UCL</span>
-          <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/541.png" style="width:16px;height:16px;object-fit:contain">
-          <span style="font-size:13px;flex:1">Real Madrid</span>
-          <span style="font-size:13px;color:var(--text-light);font-variant-numeric:tabular-nums">21:00</span>
-          <span style="font-size:10px;color:var(--text-light);background:var(--surface-2);padding:1px 6px;border-radius:4px">A</span>
+          <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">
+            <span style="font-size:13px;font-weight:500">Real Madrid</span>
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/541.png" style="width:20px;height:20px;object-fit:contain">
+          </div>
+          <div style="text-align:center;font-size:11px;color:var(--text-light)">vs</div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/40.png" style="width:20px;height:20px;object-fit:contain">
+            <span style="font-size:13px;font-weight:700">Liverpool</span>
+          </div>
+          <div style="text-align:right;font-size:13px;font-weight:700;color:var(--danger);font-family:'Geist',system-ui">⚡28</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface);border-left:3px solid var(--border)">
-          <span style="font-size:11px;color:var(--primary);min-width:44px;font-weight:600">Apr 12</span>
-          <span class="comp-tag league" style="font-size:9px">PL</span>
-          <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/42.png" style="width:16px;height:16px;object-fit:contain">
-          <span style="font-size:13px;flex:1">Arsenal</span>
-          <span style="font-size:13px;color:var(--text-light);font-variant-numeric:tabular-nums">15:00</span>
-          <span style="font-size:10px;color:var(--text-light);background:var(--surface-2);padding:1px 6px;border-radius:4px">A</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface);border-radius:0 0 6px 6px;border-left:3px solid var(--border)">
-          <span style="font-size:11px;color:var(--primary);min-width:44px;font-weight:600">Apr 19</span>
-          <span class="comp-tag league" style="font-size:9px">PL</span>
-          <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/51.png" style="width:16px;height:16px;object-fit:contain">
-          <span style="font-size:13px;flex:1">Brighton</span>
-          <span style="font-size:13px;color:var(--text-light);font-variant-numeric:tabular-nums">17:30</span>
-          <span style="font-size:10px;color:var(--text-light);background:var(--surface-2);padding:1px 6px;border-radius:4px">H</span>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:10px">
+          <span style="color:var(--danger);font-weight:600">⚠ 赛程密集</span>
+          <span style="color:var(--text-light)">间隔 4 天 &middot; 四分之一决赛次回合</span>
         </div>
       </div>
     </div>
 
-    <!-- March Group -->
-    <div>
-      <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px">三月 2026</div>
+    <!-- April Group — upcoming -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">即将到来</div>
       <div style="display:flex;flex-direction:column;gap:1px">
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface);border-radius:6px 6px 0 0;border-left:3px solid #22c55e">
-          <span style="font-size:11px;color:var(--text-light);min-width:44px">Mar 29</span>
+        <div style="display:grid;grid-template-columns:44px auto 1fr 28px 1fr 40px;align-items:center;padding:12px;background:var(--surface);border-radius:6px 6px 0 0;border-left:3px solid var(--border);gap:6px">
+          <div style="font-size:11px;color:var(--text-light);text-align:center;line-height:1.3"><div>Apr 12</div><div style="font-weight:600;font-family:'Geist',system-ui;color:var(--text-muted)">15:00</div></div>
           <span class="comp-tag league" style="font-size:9px">PL</span>
-          <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/33.png" style="width:16px;height:16px;object-fit:contain">
-          <span style="font-size:13px;flex:1">Man United</span>
-          <span style="font-size:13px;font-weight:700;font-variant-numeric:tabular-nums">2-0</span>
-          <span style="font-size:10px;color:var(--text-light);background:var(--surface-2);padding:1px 6px;border-radius:4px">A</span>
+          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <span style="font-size:13px;font-weight:500">Arsenal</span>
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/42.png" style="width:20px;height:20px;object-fit:contain">
+          </div>
+          <div style="text-align:center;font-size:11px;color:var(--text-light)">vs</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/40.png" style="width:20px;height:20px;object-fit:contain">
+            <span style="font-size:13px;font-weight:700">Liverpool</span>
+          </div>
+          <div style="text-align:right;font-size:11px;font-weight:600;color:var(--warning);font-family:'Geist',system-ui">3天</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface);border-radius:0 0 6px 6px;border-left:3px solid var(--surface-2)">
-          <span style="font-size:11px;color:var(--text-light);min-width:44px">Mar 15</span>
+        <div style="display:grid;grid-template-columns:44px auto 1fr 28px 1fr 40px;align-items:center;padding:12px;background:var(--surface);border-radius:0 0 6px 6px;border-left:3px solid var(--border);gap:6px">
+          <div style="font-size:11px;color:var(--text-light);text-align:center;line-height:1.3"><div>Apr 19</div><div style="font-weight:600;font-family:'Geist',system-ui;color:var(--text-muted)">17:30</div></div>
+          <span class="comp-tag league" style="font-size:9px">PL</span>
+          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <span style="font-size:13px;font-weight:700">Liverpool</span>
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/40.png" style="width:20px;height:20px;object-fit:contain">
+          </div>
+          <div style="text-align:center;font-size:11px;color:var(--text-light)">vs</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/51.png" style="width:20px;height:20px;object-fit:contain">
+            <span style="font-size:13px;font-weight:500">Brighton</span>
+          </div>
+          <div style="text-align:right;font-size:11px;font-weight:600;color:var(--success);font-family:'Geist',system-ui">7天</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- April — completed -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">四月 2026</div>
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <div style="display:grid;grid-template-columns:44px auto 1fr 52px 1fr 40px;align-items:center;padding:12px;background:var(--surface);border-radius:6px;border-left:3px solid var(--success);gap:6px;position:relative;overflow:hidden">
+          <div class="energy-accent energy-accent-home fresh" style="width:62%;max-width:50%;height:2px"></div>
+          <div style="font-size:11px;color:var(--text-light);text-align:center">Apr 5</div>
+          <span class="comp-tag league" style="font-size:9px">PL</span>
+          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <span style="font-size:13px;font-weight:700">Liverpool</span>
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/40.png" style="width:20px;height:20px;object-fit:contain">
+          </div>
+          <div style="text-align:center"><span style="font-size:15px;font-weight:700;font-family:'Geist',system-ui;font-variant-numeric:tabular-nums">2-1</span> <span style="font-size:10px;font-weight:700;color:var(--success)">W</span></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/49.png" style="width:20px;height:20px;object-fit:contain">
+            <span style="font-size:13px">Chelsea</span>
+          </div>
+          <div style="text-align:right;font-size:12px;font-weight:700;color:var(--success);font-family:'Geist',system-ui">62</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- March — completed -->
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">三月 2026</div>
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <div style="display:grid;grid-template-columns:44px auto 1fr 52px 1fr 40px;align-items:center;padding:12px;background:var(--surface);border-radius:6px 6px 0 0;border-left:3px solid var(--success);gap:6px;position:relative;overflow:hidden">
+          <div class="energy-accent energy-accent-home tired" style="width:45%;max-width:50%;height:2px"></div>
+          <div style="font-size:11px;color:var(--text-light);text-align:center">Mar 29</div>
+          <span class="comp-tag league" style="font-size:9px">PL</span>
+          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <span style="font-size:13px">Man United</span>
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/33.png" style="width:20px;height:20px;object-fit:contain">
+          </div>
+          <div style="text-align:center"><span style="font-size:15px;font-weight:700;font-family:'Geist',system-ui;font-variant-numeric:tabular-nums">0-2</span> <span style="font-size:10px;font-weight:700;color:var(--success)">W</span></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/40.png" style="width:20px;height:20px;object-fit:contain">
+            <span style="font-size:13px;font-weight:700">Liverpool</span>
+          </div>
+          <div style="text-align:right;font-size:12px;font-weight:700;color:var(--warning);font-family:'Geist',system-ui">45</div>
+        </div>
+        <div style="display:grid;grid-template-columns:44px auto 1fr 52px 1fr 40px;align-items:center;padding:12px;background:var(--surface);border-left:3px solid var(--surface-2);gap:6px;position:relative;overflow:hidden">
+          <div class="energy-accent energy-accent-home fresh" style="width:58%;max-width:50%;height:2px"></div>
+          <div style="font-size:11px;color:var(--text-light);text-align:center">Mar 15</div>
           <span class="comp-tag european" style="font-size:9px">UCL</span>
-          <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/165.png" style="width:16px;height:16px;object-fit:contain">
-          <span style="font-size:13px;flex:1">Dortmund</span>
-          <span style="font-size:13px;font-weight:700;font-variant-numeric:tabular-nums">1-1</span>
-          <span style="font-size:10px;color:var(--text-light);background:var(--surface-2);padding:1px 6px;border-radius:4px">H</span>
+          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <span style="font-size:13px;font-weight:700">Liverpool</span>
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/40.png" style="width:20px;height:20px;object-fit:contain">
+          </div>
+          <div style="text-align:center"><span style="font-size:15px;font-weight:700;font-family:'Geist',system-ui;font-variant-numeric:tabular-nums">1-1</span> <span style="font-size:10px;font-weight:700;color:var(--text-light)">D</span></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/165.png" style="width:20px;height:20px;object-fit:contain">
+            <span style="font-size:13px">Dortmund</span>
+          </div>
+          <div style="text-align:right;font-size:12px;font-weight:700;color:var(--success);font-family:'Geist',system-ui">58</div>
+        </div>
+        <div style="display:grid;grid-template-columns:44px auto 1fr 52px 1fr 40px;align-items:center;padding:12px;background:var(--surface);border-radius:0 0 6px 6px;border-left:3px solid var(--danger);gap:6px;position:relative;overflow:hidden">
+          <div class="energy-accent energy-accent-home exhausted" style="width:30%;max-width:50%;height:2px"></div>
+          <div style="font-size:11px;color:var(--text-light);text-align:center">Mar 8</div>
+          <span class="comp-tag league" style="font-size:9px">PL</span>
+          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+            <span style="font-size:13px">Tottenham</span>
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/47.png" style="width:20px;height:20px;object-fit:contain">
+          </div>
+          <div style="text-align:center"><span style="font-size:15px;font-weight:700;font-family:'Geist',system-ui;font-variant-numeric:tabular-nums">2-0</span> <span style="font-size:10px;font-weight:700;color:var(--danger)">L</span></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <img src="https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/teams/40.png" style="width:20px;height:20px;object-fit:contain">
+            <span style="font-size:13px;font-weight:700">Liverpool</span>
+          </div>
+          <div style="text-align:right;font-size:12px;font-weight:700;color:var(--danger);font-family:'Geist',system-ui">30</div>
         </div>
       </div>
     </div>
