@@ -14,9 +14,16 @@
 - **Reference sites:** https://www.fotmob.com/
 
 ## Typography
-- **Display/Hero/Body/UI:** System font stack — `-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif`
-- **Data/Scores:** Same stack with `font-variant-numeric: tabular-nums` for aligned numbers
-- **Loading:** No web fonts needed — system fonts for fastest load
+- **Display/Hero:** `'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif` — 比分、大数字、fatigue index 等 hero 数据用 Geist，锐利几何感，tabular-nums 天生对齐
+- **Body/UI:** `'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif` — 英文 body、按钮、标签用 DM Sans，几何感干净，比系统字体更有辨识度
+- **Data/Scores:** `'Geist', system-ui, sans-serif` with `font-variant-numeric: tabular-nums` — 所有数字密集区（积分榜、统计表、比分）用 Geist 确保数字等宽对齐
+- **Code/ACWR/精确数据:** `'Geist Mono', 'SF Mono', monospace` — ACWR 值、PFI 数值等需要等宽展示的场景
+- **中文:** 保持系统字体栈（苹方/思源黑体），不加载中文 web fonts。中文字体文件太大（3-5MB），不值得
+- **Loading:** Google Fonts CDN，只加载 latin subset。总增量约 20-30KB
+  ```html
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  ```
+- **Fallback 策略:** `font-display: swap`，系统字体先渲染，web font 加载后无闪烁切换。数据优先产品不能等字体
 - **Scale (updated 2026-04-08, previous version too small across the board):**
   - 11px — captions only (timestamps below match rows, "FT" status badge)
   - 12px — meta text, tertiary labels (venue, referee, matchday label)
@@ -107,14 +114,19 @@ All page prototypes are in `docs/design-preview.html`. Open in browser to view:
 - Left: league navigation with real icons from R2
 - Center: date picker + match rows grouped by league
 - Right: top stories + mini standings table
-- **SonarFC addition:** Energy comparison bar under each match row (home energy | "Energy" label | away energy)
+- **SonarFC addition:** Energy pill inline in match row (单行设计，不再独占一行)
+  - Energy pill 位于队名内侧（主队名左侧，客队名右侧）
+  - 颜色编码：green(>55)/orange(35-55)/red(<35)，带浅色背景 10% opacity
+  - 字号 11px Geist，font-weight 600，圆角 4px，min-width 28px
+  - Grid 结构：`60px 32px 1fr 40px 1fr 32px 40px` (时间|主队能量|主队名|比分|客队名|客队能量|收藏)
 - **Match row sizing:**
   - Team names: **15px, font-weight 500** (must be clearly readable at a glance)
-  - Score: **17px, font-weight 700, tabular-nums** (the loudest element in the row)
-  - Match time/status: 12px, muted
-  - Row height: minimum 52px (was too compact before)
-  - Team badge: 20px (was 18px)
-  - Row padding: 12px 16px (was 10px 16px)
+  - Score: **17px, font-weight 700, Geist, tabular-nums** (the loudest element in the row)
+  - Match time/status: 12px, Geist, muted
+  - Energy pill: 11px, Geist, colored background pill
+  - Row height: minimum 52px
+  - Team badge: 20px
+  - Row padding: 12px 16px
 
 ### Match Detail
 - **Match header (占页面视觉重心，不能弱):**
@@ -451,11 +463,30 @@ Each player's match performance shown as a compact card:
   - 筛选: 全部 | 联赛 | 杯赛 | 欧战
 
 #### 体能 Tab (SonarFC Exclusive)
-- Squad Energy grid: player cards with name, energy score, position, minutes, mini energy bar
-- Color-coded border-left (red/yellow/green by energy level)
+- Squad Energy grid (每张卡片):
+  - **球员头像** (36px 圆形，R2 CDN) + **Energy badge** (18px 圆形，叠在头像右下角，颜色编码背景+白色数字，2px surface 边框)
+  - 姓名 (13px bold) + 球衣号码 (#XX, 10px muted) + 角色标签 (right-aligned)
+  - 位置 + 14日出场分钟 + 年龄 (10px muted)
+  - Mini energy bar (3px, 颜色编码)
+  - 左边框 3px 颜色编码 (red/yellow/green)
+  - Grid: `repeat(auto-fill, minmax(200px, 1fr))`
+- **缺阵球员** (每行):
+  - 球员头像 (40px 圆形，`grayscale(60%) opacity(0.8)` 表示不可用)
+  - 伤病/警告图标叠在头像右上角
+  - 姓名 + 球衣号码 + 位置
+  - 伤情描述 (11px muted)
+  - 状态 pill: 伤停(红色) / 存疑(橙色) / 停赛(蓝色)
 - 角色分布饼图: 主力/轮换/板凳比例
-- Unavailable section: injury list with status tags (Injured/Doubtful)
 - 赛程密集度时间线: 未来 30 天赛程密度可视化
+
+### 球员显示规范（全局）
+所有涉及球员信息展示的地方，必须包含球员头像。具体规格：
+- **评分排行列表** (Stats Tab): 24px 圆形头像 + 排名 + 姓名 + 评分 badge。Top 1 球员金色边框高亮
+- **替补球员列表** (Lineup Tab): 24px 圆形头像 + 球衣号 + 姓名 + 评分 badge
+- **射手/助攻榜**: 32px 圆形头像 + 排名 + 姓名 + 球队 + 数值
+- **疲劳排行**: 32px 圆形头像 + 排名 + 姓名 + 球队 + Energy 值 + 时间统计
+- **头像来源**: `https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/players/{api_football_player_id}.png`
+- **头像 fallback**: 加载失败时显示 `var(--surface-2)` 圆形 + 球衣号码文字
 
 ### World Cup Hub
 - Dark red gradient header (#56042c → #8a1538) with tournament stats
@@ -518,6 +549,160 @@ Mini pitch visualization for lineup display:
 - **Player dots:** 28px circles, white border, jersey number inside (11px)
 - **Home team:** Positioned top-to-bottom (GK at bottom)
 
+## Loading & Skeleton States
+
+数据产品的加载体验直接影响感知性能。空白页面 = 用户流失。
+
+### Skeleton Screen 规范
+- **颜色:** `var(--surface-2)` 背景，`var(--surface)` 上层，形成微妙对比
+- **动画:** 从左到右的 shimmer 光泽扫过，`background-size: 200%`，动画 1.5s ease-in-out infinite
+- **圆角:** 与实际组件一致（文字行 4px，头像 50%，卡片 6px）
+- **不要:** 用 spinner。数据产品用 skeleton 模拟布局结构，用户知道内容要来了
+
+### 各页面 Skeleton
+- **Match Feed 首页:**
+  - 联赛分组标题: 12px 高灰条（宽 120px）
+  - 每个比赛行: 左侧 20px 圆 + 100px 灰条 | 中间 40px 灰条 | 右侧 20px 圆 + 100px 灰条
+  - Energy bar 区: 两条 8px 高灰条，中间 "Energy" 标签保持不变
+  - 默认显示 8 行 skeleton 比赛行
+- **Match Detail:**
+  - Header: 两个 56px 圆 + 中间 28px 高灰条（比分位置）
+  - Tab 内容区: 根据 active tab 显示对应 skeleton
+  - Facts tab skeleton: 60px 高矩形（控球率图位置）+ 6 行对比条 skeleton
+- **积分榜:**
+  - 表头保持真实文字
+  - 每行: 20px 序号 + 20px 圆(徽章) + 100px 灰条(队名) + 6 个 30px 灰条(数据列)
+  - 显示 20 行
+- **球员页:**
+  - Header: 72px 圆(照片) + 两行灰条(姓名+球队)
+  - 雷达图区: 200px 灰色六边形轮廓
+
+### 页面切换
+- Tab 切换: 立即显示 skeleton，数据到达后 fade-in 替换（150ms opacity transition）
+- 页面跳转: 新页面直接 skeleton，不显示上一页残影
+
+## Empty States
+
+无数据时的占位设计。不要空白，要告诉用户为什么没数据、什么时候会有。
+
+### 通用样式
+- **容器:** 居中，max-width 280px，padding 40px 0
+- **图标:** 32px，`var(--text-light)` 颜色，用简单 line icon（不用插画）
+- **标题:** 15px，`var(--text)` 颜色，font-weight 500
+- **描述:** 13px，`var(--text-muted)` 颜色，居中对齐
+- **CTA 按钮（如有）:** 绿色 pill 按钮，13px
+
+### 具体场景
+- **无比赛日:** ⚽ 图标 + "今天没有比赛" + "试试切换日期查看其他比赛日" + 日期选择器 CTA
+- **联赛休赛期:** 📅 图标 + "联赛暂未开赛" + "预计 {start_date} 开始新赛季"
+- **球员无数据:** 📊 图标 + "暂无统计数据" + "该球员本赛季尚未出场"
+- **伤病信息缺失:** 🏥 图标 + "暂无伤病信息" + "数据来源更新后将自动展示"
+- **搜索无结果:** 🔍 图标 + "未找到 '{query}'" + "试试换个关键词"
+- **Sonar Tab 无数据:** 📡 图标 + "体能数据计算中" + "新赛季开始后将自动生成"
+
+## Search UI
+
+全局搜索，快速找到球队、球员、联赛。
+
+### 搜索入口
+- **位置:** 顶部导航栏右侧，收起状态显示 🔍 图标按钮
+- **展开:** 点击后 input 从右侧滑出，宽度 280px，autofocus
+- **快捷键:** `/` 触发搜索（数据产品标配）
+- **输入框样式:** `var(--surface)` 背景，`var(--border)` 边框，13px 文字，圆角 6px，padding 8px 12px
+
+### 搜索结果
+- **触发:** 输入 2+ 字符后 debounce 300ms 开始搜索
+- **下拉面板:** 固定宽度 360px，max-height 400px，`var(--background)` 背景，`var(--border)` 边框，圆角 8px，box-shadow: `0 4px 12px rgba(0,0,0,0.1)`
+- **结果分组:**
+  - "球队" 组标题 (11px, `var(--text-light)`, uppercase)
+  - "球员" 组标题
+  - "联赛" 组标题
+- **每条结果:**
+  - 球队: 徽章(20px) + 球队名(15px) + 联赛标签(11px muted)
+  - 球员: 头像(20px 圆) + 球员名(15px) + 球队名(12px muted) + 位置(12px muted)
+  - 联赛: 联赛图标(20px) + 联赛名(15px) + 国家(12px muted)
+- **高亮:** 匹配文字用 `<mark>` 标签，背景 `var(--primary-light)`
+- **键盘导航:** ↑↓ 选择，Enter 跳转，Esc 关闭
+- **行高:** 40px，hover 背景 `var(--surface)`
+
+## Share / 分享截图
+
+赛前状态截图是 SonarFC 的核心传播载体。每张截图都是一次品牌曝光。
+
+### 分享按钮
+- **位置:** Match Detail 页右上角，🔗 图标按钮，与其他操作按钮同行
+- **Sonar Tab:** 额外的 "分享 Sonar 报告" 绿色 pill 按钮，在 tab 内容底部
+
+### 截图生成（Canvas/html2canvas）
+- **尺寸:** 1080×1920px（9:16 竖屏，适配微信/小红书/Instagram Story）
+- **备选:** 1080×1080px（1:1 正方形，适配微博/Twitter）
+- **背景:** `var(--background)` + 顶部 80px 品牌区
+- **品牌区:**
+  - 左: SonarFC logo + 文字标识，`var(--primary)` 绿色
+  - 右: 日期 + 赛事标签
+  - 底部细线: `var(--primary)` 1px
+- **内容区:** 复用 Sonar Tab 的两列布局，但字号放大 20%（截图缩小后仍可读）
+- **底部水印:**
+  - "SonarFC — Pre-match Condition Intelligence" 11px `var(--text-light)`
+  - 二维码（可选，链接到该比赛的 Sonar 页）
+  - 高度 60px
+
+### 分享流程
+1. 用户点击分享按钮 → 弹出底部 sheet
+2. 选择格式: 竖屏(9:16) / 正方形(1:1)
+3. 预览截图 → 点击"保存图片"或"复制到剪贴板"
+4. 底部 sheet 高度 auto，圆角 12px top，backdrop blur
+
+## Match Feed 首页交互
+
+### 日期选择器
+- **位置:** 内容区顶部，横向滚动日期条
+- **当前样式:** 每天一个 pill，宽 60px，高 44px
+  - 上方: 星期几(11px, `var(--text-light)`)
+  - 下方: 日期数字(15px, font-weight 500)
+- **选中状态:** `var(--primary)` 背景，白色文字，圆角 8px
+- **今天标记:** 日期数字下方有 4px 绿色圆点
+- **滚动:** 可左右滑动，默认居中显示今天，左侧 3 天 + 右侧 7 天可见
+- **无比赛日期:** 文字颜色 `var(--text-light)`，选中后仍显示空状态
+
+### 联赛筛选
+- **位置:** 左侧栏（desktop）或日期选择器下方可折叠（mobile）
+- **列表项:** 联赛图标(20px) + 联赛名(13px)，行高 36px
+- **选中状态:** 左边框 3px `var(--primary)`，背景 `var(--primary-light)`
+- **"全部联赛":** 列表顶部，默认选中
+- **关注的联赛:** 单独分组置顶，标题 "My Leagues"(11px uppercase muted)
+
+### 比赛列表滚动
+- **策略:** 单日数据量有限（通常 20-50 场），一次性加载，不需要无限滚动
+- **分组:** 按联赛分组，每组标题 sticky 在顶部
+- **分组标题:** 联赛图标(16px) + 联赛名(13px medium) + 比赛数(12px muted)，背景 `var(--surface)`，padding 8px 16px
+- **Live 比赛:** 置顶分组 "LIVE"，绿色脉冲圆点 + 绿色文字
+
+### 下拉刷新
+- **触发:** 下拉 60px 触发刷新
+- **指示器:** 绿色 spinner（仅此处用 spinner，因为是用户主动触发）
+- **文字:** "松开刷新" → "加载中..." → "已更新"
+
+## Pro 付费墙 UI
+
+免费用户可以看球队级 TFI（Team Fatigue Index），Pro 用户解锁球员级 PFI（Player Fatigue Index）。
+
+### 模糊锁定
+- **适用区域:** Player 体能 Tab、Sonar Tab 的 Key Player Load 详细数据、球员页的 Energy 分数
+- **模糊效果:** `filter: blur(6px)` + `pointer-events: none`
+- **叠加层:** 半透明白色 `rgba(255,255,255,0.7)` (dark mode: `rgba(0,0,0,0.5)`)
+- **锁定图标:** 🔒 24px 居中
+- **CTA 文字:** "升级 Pro 查看球员体能数据" 15px `var(--text)` font-weight 500
+- **按钮:** "升级 Pro" 绿色 pill 按钮，13px，padding 8px 20px
+
+### 免费预览
+- **策略:** 每场比赛的 Sonar Tab 显示前 2 名关键球员的数据（诱饵），其余模糊
+- **提示:** 模糊区域上方显示 "还有 {n} 名球员的体能数据" 12px muted
+
+### Pro 标记
+- **位置:** Tab 名称旁边，如 "体能 PRO"
+- **样式:** "PRO" 小标签，10px，`#f59e0b` 背景，白色文字，圆角 2px，padding 1px 4px
+
 ## Asset URLs
 - **R2 Public Domain:** `https://pub-37e90a160b6842ac9ab60cf44b39b380.r2.dev/`
 - **Teams:** `teams/{api_football_team_id}.png` (e.g., `teams/40.png` for Liverpool)
@@ -529,7 +714,15 @@ Mini pitch visualization for lineup display:
 |------|----------|-----------|
 | 2026-04-07 | High-fidelity FotMob clone as base | User wants to replicate proven UX, add SonarFC modules on top |
 | 2026-04-07 | Green #1a932e as primary | FotMob green, natural football association |
-| 2026-04-07 | System font stack, no web fonts | Fastest load, matches FotMob's clean utility feel |
+| 2026-04-07 | System font stack, no web fonts | ~~Fastest load, matches FotMob's clean utility feel~~ **Superseded 2026-04-10** |
+| 2026-04-10 | Geist + DM Sans for EN/numbers, system fonts for CN | Geist tabular-nums 让比分/统计数字更锐利对齐，DM Sans 给英文 UI 品牌辨识度，中文保持系统字体避免 3-5MB 字体文件 |
+| 2026-04-10 | Added Loading/Skeleton states spec | 数据产品不能空白加载，skeleton screen 模拟布局结构提升感知性能 |
+| 2026-04-10 | Added Empty states spec | 无比赛日、无数据等场景需要告诉用户为什么没数据、什么时候会有 |
+| 2026-04-10 | Added Search UI spec | 全局搜索是数据产品的基础交互，球队/球员/联赛快速查找 |
+| 2026-04-10 | Added Share screenshot spec | 赛前状态截图是核心传播载体，9:16 竖屏 + 品牌水印，每张截图都是品牌曝光 |
+| 2026-04-10 | Added Match Feed interaction details | 日期选择器、联赛筛选、比赛分组、Live 置顶等首页交互细节 |
+| 2026-04-10 | Added Pro paywall UI spec | 免费看 TFI / Pro 解锁 PFI，模糊锁定 + 预览诱饵 + CTA 按钮 |
+| 2026-04-10 | Energy bar → inline Energy pill | 独立 energy bar 行信息密度低，改为 11px 色块 pill 嵌入 match row 同行。Grid 从 5 列变 7 列 |
 | 2026-04-07 | Energy bar inverted from fatigue | Long bar = good state is universal "health bar" intuition. Fatigue-up = confusing |
 | 2026-04-07 | Two-column Sonar Tab layout | Matches prototype design, enables side-by-side team comparison |
 | 2026-04-07 | World Cup page with dark red header | Visual differentiation for tournament mode, FIFA brand association |
