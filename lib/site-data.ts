@@ -21,8 +21,12 @@ import type {
   KeyPlayerLoad,
   LocalizedText,
   MatchBucket,
+  MatchPostgameData,
+  MatchPlayerPerformance,
   MatchRecord,
   MatchSide,
+  MatchTeamStatLine,
+  MatchTimelineEvent,
   NewsItem,
   PlayerComparisonItem,
   PlayerProfile,
@@ -164,6 +168,32 @@ interface AppearanceRow {
   is_starter: boolean | null;
   subbed_in_at?: number | null;
   subbed_out_at?: number | null;
+  rating?: number | null;
+  goals?: number | null;
+  assists?: number | null;
+  shots_total?: number | null;
+  shots_on?: number | null;
+  passes_total?: number | null;
+  passes_key?: number | null;
+  passes_accuracy?: number | null;
+  tackles?: number | null;
+  interceptions?: number | null;
+  blocks?: number | null;
+  duels_total?: number | null;
+  duels_won?: number | null;
+  dribbles_attempts?: number | null;
+  dribbles_success?: number | null;
+  fouls_drawn?: number | null;
+  fouls_committed?: number | null;
+  yellow_cards?: number | null;
+  red_cards?: number | null;
+  penalty_scored?: number | null;
+  penalty_missed?: number | null;
+  penalty_saved?: number | null;
+  saves?: number | null;
+  is_captain?: boolean | null;
+  jersey_number?: number | null;
+  position_played?: string | null;
 }
 
 interface InjuryRow {
@@ -180,6 +210,48 @@ interface AiPreviewRow {
   match_id: number | null;
   team_id: number | null;
   content: string;
+}
+
+interface MatchEventRow {
+  id: number;
+  match_id: number;
+  team_id: number | null;
+  player_id: number | null;
+  assist_player_id: number | null;
+  event_type: string | null;
+  detail: string | null;
+  minute: number | null;
+  extra_minute: number | null;
+  comments: string | null;
+}
+
+interface MatchStatRow {
+  id: number;
+  match_id: number;
+  team_id: number | null;
+  possession: number | null;
+  shots_total: number | null;
+  shots_on: number | null;
+  shots_off: number | null;
+  shots_blocked: number | null;
+  shots_inside_box: number | null;
+  shots_outside_box: number | null;
+  corner_kicks: number | null;
+  offsides: number | null;
+  fouls: number | null;
+  yellow_cards: number | null;
+  red_cards: number | null;
+  goalkeeper_saves: number | null;
+  passes_total: number | null;
+  passes_accurate: number | null;
+  passes_pct: number | null;
+}
+
+interface MatchPlayerRow {
+  id: number;
+  name: string;
+  position: string | null;
+  team_id: number | null;
 }
 
 interface SiteSnapshot {
@@ -510,6 +582,21 @@ export async function getSiteSnapshot(): Promise<SiteSnapshot> {
   }
 }
 
+export async function getMatchPageData(matchSlug: string): Promise<{
+  snapshot: SiteSnapshot;
+  match: MatchRecord | null;
+}> {
+  const snapshot = await getSiteSnapshot();
+  const currentMatch = snapshot.matches.find((item) => item.slug === matchSlug) ?? null;
+
+  if (!currentMatch) {
+    return { snapshot, match: null };
+  }
+
+  const match = await enrichMatchWithPostgame(currentMatch);
+  return { snapshot, match };
+}
+
 async function loadLegacySnapshot(
   client: ReturnType<typeof getSupabaseServerClient>
 ): Promise<SiteSnapshot> {
@@ -690,6 +777,356 @@ async function loadLegacySnapshot(
   };
 }
 
+async function enrichMatchWithPostgame(match: MatchRecord): Promise<MatchRecord> {
+  if (!match.sourceId || !match.home.sourceId || !match.away.sourceId || !isSupabaseConfigured()) {
+    return match;
+  }
+
+  try {
+    const client = getSupabaseServerClient();
+    const matchId = match.sourceId;
+
+    const [eventRows, statRows, appearanceRows] = await Promise.all([
+      fetchOptionalRows<MatchEventRow>("match_events", (from, to) =>
+        client
+          .from("match_events")
+          .select(
+            "id,match_id,team_id,player_id,assist_player_id,event_type,detail,minute,extra_minute,comments"
+          )
+          .eq("match_id", matchId)
+          .order("minute", { ascending: true })
+          .range(from, to)
+      ),
+      fetchOptionalRows<MatchStatRow>("match_stats", (from, to) =>
+        client
+          .from("match_stats")
+          .select(
+            "id,match_id,team_id,possession,shots_total,shots_on,shots_off,shots_blocked,shots_inside_box,shots_outside_box,corner_kicks,offsides,fouls,yellow_cards,red_cards,goalkeeper_saves,passes_total,passes_accurate,passes_pct"
+          )
+          .eq("match_id", matchId)
+          .range(from, to)
+      ),
+      fetchOptionalRows<AppearanceRow>("appearances", (from, to) =>
+        client
+          .from("appearances")
+          .select(
+            "id,player_id,match_id,minutes_played,is_starter,subbed_in_at,subbed_out_at,rating,goals,assists,shots_total,shots_on,passes_total,passes_key,passes_accuracy,tackles,interceptions,blocks,duels_total,duels_won,dribbles_attempts,dribbles_success,fouls_drawn,fouls_committed,yellow_cards,red_cards,penalty_scored,penalty_missed,penalty_saved,saves,is_captain,jersey_number,position_played"
+          )
+          .eq("match_id", matchId)
+          .range(from, to)
+      ),
+    ]);
+
+    const playerIds = unique(
+      appearanceRows.map((row) => row.player_id),
+      eventRows.flatMap((row) => [row.player_id, row.assist_player_id].filter((item): item is number => item != null))
+    );
+
+    const playerRows = playerIds.length
+      ? await fetchOptionalRows<MatchPlayerRow>("players", (from, to) =>
+          client
+            .from("players")
+            .select("id,name,position,team_id")
+            .in("id", playerIds)
+            .range(from, to)
+        )
+      : [];
+
+    const postgame = buildPostgameData({
+      match,
+      eventRows,
+      statRows,
+      appearanceRows,
+      playerRows,
+    });
+
+    if (!postgame) {
+      return match;
+    }
+
+    return {
+      ...match,
+      postgame,
+    };
+  } catch (error) {
+    console.warn(`[SonarFC] Unable to enrich postgame data for ${match.slug}`, error);
+    return match;
+  }
+}
+
+function buildPostgameData({
+  match,
+  eventRows,
+  statRows,
+  appearanceRows,
+  playerRows,
+}: {
+  match: MatchRecord;
+  eventRows: MatchEventRow[];
+  statRows: MatchStatRow[];
+  appearanceRows: AppearanceRow[];
+  playerRows: MatchPlayerRow[];
+}): MatchPostgameData | null {
+  if (!match.home.sourceId || !match.away.sourceId) {
+    return null;
+  }
+
+  const playerById = new Map<number, MatchPlayerRow>(playerRows.map((row) => [row.id, row]));
+  const homePlayers: MatchPlayerPerformance[] = [];
+  const awayPlayers: MatchPlayerPerformance[] = [];
+
+  appearanceRows.forEach((row) => {
+    const performance = mapMatchPlayerPerformance({
+      row,
+      playerById,
+      match,
+    });
+
+    if (!performance) {
+      return;
+    }
+
+    if (performance.teamId === match.home.teamId) {
+      homePlayers.push(performance);
+      return;
+    }
+
+    if (performance.teamId === match.away.teamId) {
+      awayPlayers.push(performance);
+    }
+  });
+
+  const timeline = eventRows
+    .map((row) => mapTimelineEvent({ row, playerById, match }))
+    .filter((item): item is MatchTimelineEvent => Boolean(item));
+  const teamStats = buildTeamStatLines({
+    homeStats: statRows.find((row) => row.team_id === match.home.sourceId),
+    awayStats: statRows.find((row) => row.team_id === match.away.sourceId),
+  });
+
+  if (!timeline.length && !teamStats.length && !homePlayers.length && !awayPlayers.length) {
+    return null;
+  }
+
+  return {
+    timeline,
+    teamStats,
+    homePlayers: sortMatchPlayers(homePlayers),
+    awayPlayers: sortMatchPlayers(awayPlayers),
+  };
+}
+
+function mapTimelineEvent({
+  row,
+  playerById,
+  match,
+}: {
+  row: MatchEventRow;
+  playerById: Map<number, MatchPlayerRow>;
+  match: MatchRecord;
+}): MatchTimelineEvent | null {
+  const teamId = resolveMappedTeamId(row.team_id, match);
+  if (!teamId) {
+    return null;
+  }
+
+  const primary = row.player_id != null ? playerById.get(row.player_id)?.name ?? null : null;
+  const secondary =
+    row.assist_player_id != null ? playerById.get(row.assist_player_id)?.name ?? null : null;
+  const normalized = (row.event_type ?? "").toLowerCase();
+  const minuteLabel = formatMinuteLabel(row.minute, row.extra_minute);
+  let kind: MatchTimelineEvent["kind"] = "other";
+  let title = primary ?? row.detail ?? row.event_type ?? "Match event";
+  let detail = row.detail ?? undefined;
+
+  if (normalized.includes("goal")) {
+    kind = "goal";
+    title = primary ?? "Goal";
+    detail =
+      detail === "Normal Goal" || !detail
+        ? "Open play goal"
+        : detail;
+  } else if (normalized.includes("card")) {
+    kind = "card";
+    title = primary ?? row.detail ?? "Card";
+    detail = row.comments ?? detail;
+  } else if (normalized.includes("subst")) {
+    kind = "substitution";
+    title = primary ?? "Substitution";
+    detail = secondary ? `Off: ${secondary}` : row.detail ?? "Lineup change";
+  } else if (normalized.includes("var")) {
+    kind = "var";
+    title = primary ?? "VAR";
+    detail = row.detail ?? row.comments ?? "VAR review";
+  } else {
+    detail = row.comments ?? detail;
+  }
+
+  return {
+    id: `event-${row.id}`,
+    minuteLabel,
+    teamId,
+    kind,
+    title,
+    detail,
+    secondary:
+      kind === "goal" && secondary
+        ? `Assist: ${secondary}`
+        : kind === "substitution" && secondary
+          ? `Off: ${secondary}`
+          : undefined,
+  };
+}
+
+function mapMatchPlayerPerformance({
+  row,
+  playerById,
+  match,
+}: {
+  row: AppearanceRow;
+  playerById: Map<number, MatchPlayerRow>;
+  match: MatchRecord;
+}): MatchPlayerPerformance | null {
+  const player = playerById.get(row.player_id);
+  if (!player) {
+    return null;
+  }
+
+  const teamId = resolveMappedTeamId(player.team_id, match);
+  if (!teamId) {
+    return null;
+  }
+
+  return {
+    playerId: row.player_id,
+    playerSlug: resolvePlayerSlug(player.name),
+    teamId,
+    name: player.name,
+    position: row.position_played ?? player.position ?? "MID",
+    jerseyNumber: row.jersey_number ?? null,
+    minutesPlayed: row.minutes_played ?? 0,
+    isStarter: Boolean(row.is_starter),
+    subbedInAt: row.subbed_in_at ?? null,
+    subbedOutAt: row.subbed_out_at ?? null,
+    rating: row.rating ?? null,
+    goals: row.goals ?? 0,
+    assists: row.assists ?? 0,
+    shotsTotal: row.shots_total ?? null,
+    shotsOn: row.shots_on ?? null,
+    passesTotal: row.passes_total ?? null,
+    passesAccuracy: row.passes_accuracy ?? null,
+    tackles: row.tackles ?? null,
+    interceptions: row.interceptions ?? null,
+    duelsWon: row.duels_won ?? null,
+    duelsTotal: row.duels_total ?? null,
+    dribblesSuccess: row.dribbles_success ?? null,
+    dribblesAttempts: row.dribbles_attempts ?? null,
+    foulsDrawn: row.fouls_drawn ?? null,
+    foulsCommitted: row.fouls_committed ?? null,
+    yellowCards: row.yellow_cards ?? 0,
+    redCards: row.red_cards ?? 0,
+    saves: row.saves ?? null,
+    isCaptain: Boolean(row.is_captain),
+  };
+}
+
+function resolveMappedTeamId(teamDbId: number | null | undefined, match: MatchRecord) {
+  if (teamDbId == null) {
+    return null;
+  }
+  if (teamDbId === match.home.sourceId) {
+    return match.home.teamId;
+  }
+  if (teamDbId === match.away.sourceId) {
+    return match.away.teamId;
+  }
+  return null;
+}
+
+function buildTeamStatLines({
+  homeStats,
+  awayStats,
+}: {
+  homeStats?: MatchStatRow;
+  awayStats?: MatchStatRow;
+}): MatchTeamStatLine[] {
+  const rows = [
+    {
+      label: bilingual("控球率", "Possession"),
+      home: formatStatValue(homeStats?.possession, "%"),
+      away: formatStatValue(awayStats?.possession, "%"),
+    },
+    {
+      label: bilingual("射门", "Shots"),
+      home: formatStatValue(homeStats?.shots_total),
+      away: formatStatValue(awayStats?.shots_total),
+    },
+    {
+      label: bilingual("射正", "On target"),
+      home: formatStatValue(homeStats?.shots_on),
+      away: formatStatValue(awayStats?.shots_on),
+    },
+    {
+      label: bilingual("角球", "Corners"),
+      home: formatStatValue(homeStats?.corner_kicks),
+      away: formatStatValue(awayStats?.corner_kicks),
+    },
+    {
+      label: bilingual("传球", "Passes"),
+      home: formatStatValue(homeStats?.passes_total),
+      away: formatStatValue(awayStats?.passes_total),
+    },
+    {
+      label: bilingual("传球成功率", "Pass accuracy"),
+      home: formatStatValue(homeStats?.passes_pct, "%"),
+      away: formatStatValue(awayStats?.passes_pct, "%"),
+    },
+    {
+      label: bilingual("扑救", "Saves"),
+      home: formatStatValue(homeStats?.goalkeeper_saves),
+      away: formatStatValue(awayStats?.goalkeeper_saves),
+    },
+    {
+      label: bilingual("犯规", "Fouls"),
+      home: formatStatValue(homeStats?.fouls),
+      away: formatStatValue(awayStats?.fouls),
+    },
+    {
+      label: bilingual("黄牌", "Yellow cards"),
+      home: formatStatValue(homeStats?.yellow_cards),
+      away: formatStatValue(awayStats?.yellow_cards),
+    },
+  ];
+
+  return rows.filter((row) => row.home !== "—" || row.away !== "—");
+}
+
+function sortMatchPlayers(players: MatchPlayerPerformance[]) {
+  return [...players].sort((left, right) => {
+    if (left.isStarter !== right.isStarter) {
+      return left.isStarter ? -1 : 1;
+    }
+    const ratingDelta = (right.rating ?? 0) - (left.rating ?? 0);
+    if (ratingDelta !== 0) {
+      return ratingDelta;
+    }
+    const positionDelta = positionRank(left.position) - positionRank(right.position);
+    if (positionDelta !== 0) {
+      return positionDelta;
+    }
+    return right.minutesPlayed - left.minutesPlayed || left.name.localeCompare(right.name);
+  });
+}
+
+function positionRank(position: string) {
+  const key = position.toUpperCase().charAt(0);
+  if (key === "G") return 0;
+  if (key === "D") return 1;
+  if (key === "M") return 2;
+  if (key === "F") return 3;
+  return 4;
+}
+
 function getFallbackSnapshot(): SiteSnapshot {
   return {
     source: "mock",
@@ -761,7 +1198,9 @@ async function loadPlayerAdjacency(
     fetchAllRows<AppearanceRow>((from, to) =>
       client
         .from("appearances")
-        .select("player_id,match_id,minutes_played,is_starter")
+        .select(
+          "player_id,match_id,minutes_played,is_starter,rating,goals,assists,yellow_cards,red_cards"
+        )
         .in("player_id", playerIds)
         .range(from, to)
     ),
@@ -915,6 +1354,7 @@ function mapMatchRow({
     "";
 
   return {
+    sourceId: row.id,
     id: `match-${row.id}`,
     slug,
     bucket: deriveBucket(row.kickoff_at),
@@ -1015,6 +1455,7 @@ function mapLegacyMatchRow({
   });
 
   return {
+    sourceId: row.id,
     id: `match-${row.id}`,
     slug: buildMatchSlug(homeTeam.slug, awayTeam.slug, competition.id),
     bucket: deriveBucket(row.kickoff_at),
@@ -1116,6 +1557,7 @@ function buildLegacyMatchSide({
       : localized(buildAiSummary(team.name, fatigue, squadAvailability));
 
   return {
+    sourceId: teamDbId,
     teamId: team.id,
     fatigue,
     squadAvailability,
@@ -1193,6 +1635,7 @@ function mapLegacyPlayerRow({
     fatigueScore
   );
   const appearancesCount = orderedAppearances.length;
+  const aggregate = summarizeAppearanceAggregate(orderedAppearances);
 
   return {
     slug,
@@ -1207,6 +1650,11 @@ function mapLegacyPlayerRow({
     last14Minutes,
     seasonMinutes,
     appearancesCount,
+    averageRating: aggregate.averageRating,
+    seasonGoals: aggregate.goals,
+    seasonAssists: aggregate.assists,
+    seasonYellowCards: aggregate.yellowCards,
+    seasonRedCards: aggregate.redCards,
     startsLast5: orderedAppearances.slice(-5).filter((item) => item.is_starter).length,
     nextFixture: resolvePlayerNextFixtureFromMatches(team.id, matches, teamByDbId) ?? "",
     summary: localized(
@@ -1312,6 +1760,7 @@ function buildMatchSide({
   );
 
   return {
+    sourceId: teamDbId,
     teamId: team.id,
     fatigue: fatigueScore,
     squadAvailability: Math.round(squadAvailability),
@@ -1546,6 +1995,7 @@ function mapPlayerRow({
     last14Minutes: Math.round(last14Minutes),
     fatigueScore,
   });
+  const aggregate = summarizeAppearanceAggregate(orderedAppearances);
 
   return {
     slug,
@@ -1560,6 +2010,11 @@ function mapPlayerRow({
     last14Minutes: Math.round(last14Minutes),
     seasonMinutes: totalMinutes || fallback?.seasonMinutes || Math.round(last14Minutes * 4),
     appearancesCount: orderedAppearances.length,
+    averageRating: aggregate.averageRating ?? fallback?.averageRating ?? null,
+    seasonGoals: aggregate.goals ?? fallback?.seasonGoals ?? 0,
+    seasonAssists: aggregate.assists ?? fallback?.seasonAssists ?? 0,
+    seasonYellowCards: aggregate.yellowCards ?? fallback?.seasonYellowCards ?? 0,
+    seasonRedCards: aggregate.redCards ?? fallback?.seasonRedCards ?? 0,
     startsLast5:
       orderedAppearances
         .slice(-5)
@@ -1774,6 +2229,10 @@ function localized(value: string): LocalizedText {
   return { zh: value, en: value };
 }
 
+function bilingual(zh: string, en: string): LocalizedText {
+  return { zh, en };
+}
+
 function deriveBucket(startsAt: string, referenceDate = new Date()): MatchBucket {
   const now = referenceDate;
   const target = new Date(startsAt);
@@ -1816,6 +2275,24 @@ function defaultStage(competitionId: string) {
     return "Group stage";
   }
   return "Matchday";
+}
+
+function formatStatValue(value: number | null | undefined, suffix = "") {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "—";
+  }
+
+  return `${Math.round(value)}${suffix}`;
+}
+
+function formatMinuteLabel(minute: number | null | undefined, extraMinute: number | null | undefined) {
+  if (typeof minute !== "number") {
+    return "—";
+  }
+  if (typeof extraMinute === "number" && extraMinute > 0) {
+    return `${minute}+${extraMinute}'`;
+  }
+  return `${minute}'`;
 }
 
 function buildVerdict(homeName: string, awayName: string, homeFatigue: number, awayFatigue: number) {
@@ -2176,6 +2653,22 @@ function resolveNextFixtureLabel(
   }
 
   return `${homeTeam.shortName} vs ${awayTeam.shortName} · ${formatKickoffLabel(upcoming.kickoff_at)}`;
+}
+
+function summarizeAppearanceAggregate(appearanceRows: AppearanceRow[]) {
+  const ratings = appearanceRows
+    .map((item) => item.rating)
+    .filter((item): item is number => typeof item === "number");
+
+  return {
+    goals: appearanceRows.reduce((sum, item) => sum + (item.goals ?? 0), 0),
+    assists: appearanceRows.reduce((sum, item) => sum + (item.assists ?? 0), 0),
+    yellowCards: appearanceRows.reduce((sum, item) => sum + (item.yellow_cards ?? 0), 0),
+    redCards: appearanceRows.reduce((sum, item) => sum + (item.red_cards ?? 0), 0),
+    averageRating: ratings.length
+      ? Math.round((ratings.reduce((sum, item) => sum + item, 0) / ratings.length) * 10) / 10
+      : null,
+  };
 }
 
 function buildPlayerComparison({

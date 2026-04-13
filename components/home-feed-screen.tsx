@@ -1,17 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 import { EntityMark } from "@/components/entity-mark";
-import { buildSeasonStandings, fixtureScoreLabel, fixtureStatusLabel } from "@/lib/match-logic";
 import { useAppPreferences } from "@/components/preferences-provider";
+import { computeTeamTFI, scheduleContextFromMatchSide } from "@/lib/fatigue-model";
 import { messages, translateText } from "@/lib/i18n";
-import { energyBand, energyScore } from "@/lib/sonar";
+import { buildSeasonStandings, fixtureScoreLabel, fixtureStatusLabel } from "@/lib/match-logic";
+import { energyBand } from "@/lib/sonar";
 import type {
   CompetitionRecord,
   MatchRecord,
   NewsItem,
+  PlayerProfile,
   TeamRecord,
 } from "@/lib/types";
 
@@ -28,83 +30,80 @@ const TOP_LEAGUE_IDS = [
 export function HomeFeedScreen({
   competitions,
   teams,
+  players,
   matches,
   newsItems,
 }: {
   competitions: CompetitionRecord[];
   teams: TeamRecord[];
+  players: PlayerProfile[];
   matches: MatchRecord[];
   newsItems: NewsItem[];
 }) {
   const [filterMode, setFilterMode] = useState<"all" | "following" | "time">("all");
+  const [selectedCompetitionId, setSelectedCompetitionId] = useState<string | "all">("all");
+  const [selectedDate, setSelectedDate] = useState<Date>(() => findInitialSelectedDate(matches));
   const { locale, followedTeams } = useAppPreferences();
   const copy = messages[locale];
   const competitionMap = new Map(competitions.map((competition) => [competition.id, competition]));
   const teamMap = new Map(teams.map((team) => [team.id, team]));
-  const [selectedDate, setSelectedDate] = useState<Date>(() => findInitialSelectedDate(matches));
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [viewMonth, setViewMonth] = useState<Date>(() => startOfMonth(findInitialSelectedDate(matches)));
-  const datePickerRef = useRef<HTMLDivElement | null>(null);
+  const playersByTeam = useMemo(() => {
+    const map = new Map<string, PlayerProfile[]>();
+    for (const player of players) {
+      map.set(player.teamId, [...(map.get(player.teamId) ?? []), player]);
+    }
+    return map;
+  }, [players]);
+
+  const topCompetitions = useMemo(
+    () => TOP_LEAGUE_IDS.map((competitionId) => competitionMap.get(competitionId)).filter(Boolean) as CompetitionRecord[],
+    [competitionMap]
+  );
+  const visibleDates = useMemo(() => buildVisibleDates(selectedDate), [selectedDate]);
   const selectedDateKey = toDateKey(selectedDate);
-  const calendarDays = useMemo(() => buildCalendarDays(viewMonth), [viewMonth]);
-  const weekdayLabels = useMemo(() => buildWeekdayLabels(locale), [locale]);
-  const matchesForFilter = useMemo(
-    () =>
-      [...matches]
-        .filter((match) =>
-          filterMode === "following"
-            ? followedTeams.includes(match.home.teamId) || followedTeams.includes(match.away.teamId)
-            : true
-        )
-        .sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
-    [filterMode, followedTeams, matches]
-  );
 
-  useEffect(() => {
-    if (!calendarOpen) {
-      return;
-    }
+  const filteredMatches = useMemo(() => {
+    return [...matches]
+      .filter((match) =>
+        selectedCompetitionId === "all" ? true : match.competitionId === selectedCompetitionId
+      )
+      .filter((match) =>
+        filterMode === "following"
+          ? followedTeams.includes(match.home.teamId) || followedTeams.includes(match.away.teamId)
+          : true
+      )
+      .sort((left, right) => {
+        if (filterMode === "time") {
+          return left.startsAt.localeCompare(right.startsAt);
+        }
 
-    function handlePointerDown(event: MouseEvent) {
-      if (!datePickerRef.current?.contains(event.target as Node)) {
-        setCalendarOpen(false);
-      }
-    }
+        const leftStatus = fixtureStatusWeight(left);
+        const rightStatus = fixtureStatusWeight(right);
+        if (leftStatus !== rightStatus) {
+          return leftStatus - rightStatus;
+        }
+        return left.startsAt.localeCompare(right.startsAt);
+      });
+  }, [filterMode, followedTeams, matches, selectedCompetitionId]);
 
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setCalendarOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleEscape);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [calendarOpen]);
-
-  const visibleMatches = matchesForFilter.filter(
-    (match) => matchDateKey(match.startsAt) === selectedDateKey
-  );
-  const nextMatch = matchesForFilter.find((match) => matchDateKey(match.startsAt) > selectedDateKey);
+  const visibleMatches = filteredMatches.filter((match) => matchDateKey(match.startsAt) === selectedDateKey);
+  const groupedMatches = buildCompetitionGroups(visibleMatches, competitions);
+  const nextMatch = filteredMatches.find((match) => matchDateKey(match.startsAt) > selectedDateKey);
   const nextMatchDate = nextMatch ? startOfDay(new Date(nextMatch.startsAt)) : null;
   const nextMatchDateLabel = nextMatchDate ? selectedDateMeta(nextMatchDate, locale) : null;
 
-  const groupedMatches = TOP_LEAGUE_IDS.map((competitionId) => ({
-    competition: competitionMap.get(competitionId),
-    matches: visibleMatches.filter((match) => match.competitionId === competitionId),
-  })).filter(
-    (group): group is { competition: CompetitionRecord; matches: MatchRecord[] } =>
-      Boolean(group.competition) && group.matches.length > 0
-  );
-
-  const featuredStandings = buildMiniStandings(
-    matches.filter((match) => match.competitionId === "premier-league"),
+  const standingsCompetitionId =
+    selectedCompetitionId !== "all" &&
+    selectedCompetitionId !== "fifa-world-cup" &&
+    selectedCompetitionId !== "champions-league"
+      ? selectedCompetitionId
+      : "premier-league";
+  const standingsCompetition = competitionMap.get(standingsCompetitionId);
+  const featuredStandings = buildSeasonStandings(
+    matches.filter((match) => match.competitionId === standingsCompetitionId),
     teamMap
   ).slice(0, 5);
+
   const featuredStory = newsItems[0];
   const sideStories = newsItems.slice(1, 5);
 
@@ -112,179 +111,121 @@ export function HomeFeedScreen({
     <div className="layout">
       <aside className="sidebar-left">
         <div className="sidebar-section-title">{copy.home.topLeagues}</div>
-        {TOP_LEAGUE_IDS.map((competitionId) => {
-          const competition = competitionMap.get(competitionId);
 
-          if (!competition) {
-            return null;
+        <button
+          type="button"
+          className={`league-item${selectedCompetitionId === "all" ? " active" : ""}`}
+          onClick={() => setSelectedCompetitionId("all")}
+        >
+          <span className="league-icon league-icon--placeholder">◎</span>
+          <span>{locale === "zh" ? "全部联赛" : "All leagues"}</span>
+        </button>
+
+        {topCompetitions.map((competition) => (
+          <button
+            key={competition.id}
+            type="button"
+            className={`league-item${competition.id === selectedCompetitionId ? " active" : ""}`}
+            onClick={() => setSelectedCompetitionId(competition.id)}
+          >
+            <EntityMark
+              value={competition.icon}
+              label={translateText(competition.name, locale)}
+              className="league-icon"
+            />
+            <span>{translateText(competition.name, locale)}</span>
+            <span className="league-item__chevron">›</span>
+          </button>
+        ))}
+
+        <Link
+          href={
+            selectedCompetitionId === "all"
+              ? "/competition/premier-league"
+              : selectedCompetitionId === "fifa-world-cup"
+                ? "/world-cup"
+                : `/competition/${competitionMap.get(selectedCompetitionId)?.slug ?? "premier-league"}`
           }
-
-          const href =
-            competition.id === "fifa-world-cup"
-              ? "/world-cup"
-              : `/competition/${competition.slug}`;
-
-          return (
-            <Link
-              key={competition.id}
-              href={href}
-              className={`league-item${competition.id === "premier-league" ? " active" : ""}`}
-            >
-              <EntityMark
-                value={competition.icon}
-                label={translateText(competition.name, locale)}
-                className="league-icon"
-              />
-              <span>{translateText(competition.name, locale)}</span>
-            </Link>
-          );
-        })}
+          className="league-footer-link"
+        >
+          {locale === "zh" ? "查看完整赛事页" : "Open competition page"}
+        </Link>
       </aside>
 
       <section className="main-content">
         <div className="date-nav">
-          <div className="date-nav__primary">
+          <div className="date-nav__header">
             <button
               type="button"
               className="date-arrow"
-              onClick={() => {
-                const nextDate = addDays(selectedDate, -1);
-                setSelectedDate(nextDate);
-                setViewMonth(startOfMonth(nextDate));
-              }}
+              onClick={() => setSelectedDate(addDays(selectedDate, -1))}
               aria-label={locale === "zh" ? "上一天" : "Previous day"}
             >
               ‹
             </button>
 
-            <div className="date-picker" ref={datePickerRef}>
-              <button
-                type="button"
-                className="date-picker__trigger"
-                onClick={() => {
-                  setViewMonth(startOfMonth(selectedDate));
-                  setCalendarOpen((open) => !open);
-                }}
-                aria-expanded={calendarOpen}
-                aria-haspopup="dialog"
-              >
-                <span className="date-picker__label">{selectedDateLabel(selectedDate, locale)}</span>
-                <span className="date-picker__meta">{selectedDateMeta(selectedDate, locale)}</span>
-                <span className={`date-picker__chevron${calendarOpen ? " date-picker__chevron--open" : ""}`}>
-                  ▾
-                </span>
-              </button>
-
-              {calendarOpen ? (
-                <>
-                  <button
-                    type="button"
-                    className="date-picker__backdrop"
-                    aria-label={locale === "zh" ? "关闭日历" : "Close calendar"}
-                    onClick={() => setCalendarOpen(false)}
-                  />
-                  <div className="date-picker__calendar" role="dialog" aria-label={locale === "zh" ? "日历" : "Calendar"}>
-                    <div className="date-picker__calendar-header">
-                      <button
-                        type="button"
-                        className="date-picker__month-arrow"
-                        onClick={() => setViewMonth(addMonths(viewMonth, -1))}
-                        aria-label={locale === "zh" ? "上个月" : "Previous month"}
-                      >
-                        ‹
-                      </button>
-                      <div className="date-picker__month-label">{monthLabel(viewMonth, locale)}</div>
-                      <button
-                        type="button"
-                        className="date-picker__month-arrow"
-                        onClick={() => setViewMonth(addMonths(viewMonth, 1))}
-                        aria-label={locale === "zh" ? "下个月" : "Next month"}
-                      >
-                        ›
-                      </button>
-                    </div>
-                    <div className="date-picker__weekdays">
-                      {weekdayLabels.map((label) => (
-                        <span key={label}>{label}</span>
-                      ))}
-                    </div>
-                    <div className="date-picker__days">
-                      {calendarDays.map((day) => (
-                        <button
-                          key={day.toISOString()}
-                          type="button"
-                          className={`date-picker__day${
-                            toDateKey(day) === selectedDateKey ? " date-picker__day--selected" : ""
-                          }${
-                            day.getMonth() !== viewMonth.getMonth() ? " date-picker__day--outside" : ""
-                          }${toDateKey(day) === toDateKey(new Date()) ? " date-picker__day--today" : ""}`}
-                          onClick={() => {
-                            setSelectedDate(day);
-                            setViewMonth(startOfMonth(day));
-                            setCalendarOpen(false);
-                          }}
-                        >
-                          {day.getDate()}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              ) : null}
+            <div className="date-nav__title">
+              <span className="date-nav__label">{selectedDateLabel(selectedDate, locale)}</span>
+              <span className="date-nav__meta">{selectedDateMeta(selectedDate, locale)}</span>
             </div>
 
             <button
               type="button"
               className="date-arrow"
-              onClick={() => {
-                const nextDate = addDays(selectedDate, 1);
-                setSelectedDate(nextDate);
-                setViewMonth(startOfMonth(nextDate));
-              }}
+              onClick={() => setSelectedDate(addDays(selectedDate, 1))}
               aria-label={locale === "zh" ? "下一天" : "Next day"}
             >
               ›
             </button>
           </div>
 
+          <div className="date-strip" aria-label={locale === "zh" ? "比赛日选择" : "Matchday selector"}>
+            {visibleDates.map((date) => {
+              const dateKey = toDateKey(date);
+              const active = dateKey === selectedDateKey;
+
+              return (
+                <button
+                  key={dateKey}
+                  type="button"
+                  className={`date-pill${active ? " active" : ""}`}
+                  onClick={() => setSelectedDate(date)}
+                >
+                  <span className="date-pill__weekday">{dateStripWeekday(date, locale)}</span>
+                  <span className="date-pill__day">{date.getDate()}</span>
+                  {dateKey === toDateKey(startOfDay(new Date())) ? <span className="date-pill__dot" /> : null}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="filter-tabs" aria-label={locale === "zh" ? "赛程过滤" : "Fixture filters"}>
-            <button
-              type="button"
-              className={`filter-tab${filterMode === "all" ? " active" : ""}`}
-              onClick={() => setFilterMode("all")}
-            >
-              {filterModeLabel("all", locale)}
-            </button>
-            <button
-              type="button"
-              className={`filter-tab${filterMode === "following" ? " active" : ""}`}
-              onClick={() => setFilterMode("following")}
-            >
-              {filterModeLabel("following", locale)}
-            </button>
-            <button
-              type="button"
-              className={`filter-tab${filterMode === "time" ? " active" : ""}`}
-              onClick={() => setFilterMode("time")}
-            >
-              {filterModeLabel("time", locale)}
-            </button>
+            {(["all", "following", "time"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={`filter-tab${filterMode === mode ? " active" : ""}`}
+                onClick={() => setFilterMode(mode)}
+              >
+                {filterModeLabel(mode, locale)}
+              </button>
+            ))}
           </div>
         </div>
 
         {groupedMatches.length ? (
           groupedMatches.map((group) => (
-            <div className="league-group" key={group.competition.id}>
+            <section className="league-group" key={group.dateKey}>
               <div className="league-group-header">
-                <EntityMark
-                  value={group.competition.icon}
-                  label={translateText(group.competition.name, locale)}
-                  className="league-icon league-icon--small"
-                />
-                <span>{translateText(group.competition.name, locale)}</span>
-                <span className="league-group-header__meta">
-                  · {group.matches[0]?.stage ?? ""}
-                </span>
+                <div className="league-group-header__main">
+                  <EntityMark
+                    value={group.competition.icon}
+                    label={translateText(group.competition.name, locale)}
+                    className="league-icon league-icon--small"
+                  />
+                  <span>{translateText(group.competition.name, locale)}</span>
+                </div>
+                <span className="league-group-header__meta">{group.matches.length}</span>
               </div>
 
               {group.matches.map((match) => {
@@ -296,27 +237,30 @@ export function HomeFeedScreen({
                 }
 
                 return (
-                  <FixtureCluster
+                  <FixtureRow
                     key={match.id}
                     match={match}
                     homeTeam={homeTeam}
                     awayTeam={awayTeam}
+                    homePlayers={playersByTeam.get(homeTeam.id) ?? []}
+                    awayPlayers={playersByTeam.get(awayTeam.id) ?? []}
                   />
                 );
               })}
-            </div>
+            </section>
           ))
         ) : (
           <div className="flat-empty">
-            <div>{copy.common.noData}</div>
+            <div className="flat-empty__icon">⚽</div>
+            <div>{locale === "zh" ? "今天没有比赛" : "No matches on this day"}</div>
+            <div className="flat-empty__body">
+              {locale === "zh" ? "试试切换日期或联赛查看其他比赛日。" : "Try another date or competition to view more fixtures."}
+            </div>
             {nextMatchDate ? (
               <button
                 type="button"
                 className="flat-empty__action"
-                onClick={() => {
-                  setSelectedDate(nextMatchDate);
-                  setViewMonth(startOfMonth(nextMatchDate));
-                }}
+                onClick={() => setSelectedDate(nextMatchDate)}
               >
                 {locale === "zh"
                   ? `查看下一比赛日 · ${nextMatchDateLabel}`
@@ -328,9 +272,8 @@ export function HomeFeedScreen({
       </section>
 
       <aside className="sidebar-right">
-        <div className="sidebar-section-title">
-          {locale === "zh" ? "Top stories" : "Top stories"}
-        </div>
+        <div className="sidebar-section-title">{locale === "zh" ? "Top stories" : "Top stories"}</div>
+
         {featuredStory ? (
           <Link href={featuredStory.href} className="news-card news-card--featured">
             <div
@@ -367,12 +310,18 @@ export function HomeFeedScreen({
 
         {!featuredStory && !sideStories.length ? (
           <div className="flat-empty">
-            {locale === "zh" ? "新闻数据接入后会显示在这里。" : "News will appear here once the data feed is connected."}
+            <div className="flat-empty__icon">🗞️</div>
+            <div>{locale === "zh" ? "暂无新闻" : "No stories yet"}</div>
+            <div className="flat-empty__body">
+              {locale === "zh" ? "新闻数据接入后会显示在这里。" : "News will appear here once the feed is connected."}
+            </div>
           </div>
         ) : null}
 
         <div className="standings-mini">
-          <div className="sidebar-section-title">Premier League</div>
+          <div className="sidebar-section-title">
+            {translateText(standingsCompetition?.name ?? { zh: "英超", en: "Premier League" }, locale)}
+          </div>
           <table>
             <thead>
               <tr>
@@ -410,62 +359,64 @@ export function HomeFeedScreen({
   );
 }
 
-function FixtureCluster({
+function FixtureRow({
   match,
   homeTeam,
   awayTeam,
+  homePlayers,
+  awayPlayers,
 }: {
   match: MatchRecord;
   homeTeam: TeamRecord;
   awayTeam: TeamRecord;
+  homePlayers: PlayerProfile[];
+  awayPlayers: PlayerProfile[];
 }) {
-  const homeEnergy = energyScore(match.home.fatigue);
-  const awayEnergy = energyScore(match.away.fatigue);
-  const homeBand = energyBand(homeEnergy);
-  const awayBand = energyBand(awayEnergy);
+  const homeEnergy = computeTeamTFI(homePlayers, {
+    scheduleContext: scheduleContextFromMatchSide(match, match.home, false),
+  }).energy;
+  const awayEnergy = computeTeamTFI(awayPlayers, {
+    scheduleContext: scheduleContextFromMatchSide(match, match.away, true),
+  }).energy;
 
   return (
-    <>
-      <Link className="match-row match-row--feed" href={`/match/${match.slug}`}>
-        <span className="match-time">{fixtureStatusLabel(match)}</span>
+    <Link className="match-row match-row--feed" href={`/match/${match.slug}`}>
+      <span className="match-time">
+        <span className="match-time__value">{fixtureStatusLabel(match)}</span>
+        <span className="match-time__date">{matchTimeLabel(match.kickoffLabel)}</span>
+      </span>
 
-        <span className="team-name home">
-          <span>{homeTeam.name}</span>
-          <EntityMark value={homeTeam.badge} label={homeTeam.name} className="team-badge" />
-        </span>
+      <EnergyPill value={homeEnergy} band={energyBand(homeEnergy)} />
 
-        <span className="match-score">
-          <span className="vs">{fixtureScoreLabel(match)}</span>
-        </span>
+      <span className="team-name home">
+        <span>{homeTeam.name}</span>
+        <EntityMark value={homeTeam.badge} label={homeTeam.name} className="team-badge" />
+      </span>
 
-        <span className="team-name away">
-          <EntityMark value={awayTeam.badge} label={awayTeam.name} className="team-badge" />
-          <span>{awayTeam.name}</span>
-        </span>
+      <span className="match-score">
+        <span className="vs">{fixtureScoreLabel(match)}</span>
+      </span>
 
-        <span className="match-row__favorite">☆</span>
-      </Link>
+      <span className="team-name away">
+        <EntityMark value={awayTeam.badge} label={awayTeam.name} className="team-badge" />
+        <span>{awayTeam.name}</span>
+      </span>
 
-      <div className="fatigue-bar-container">
-        <span className={`fatigue-label ${homeBand}`}>{homeEnergy}</span>
-        <div className="fatigue-bar">
-          <div className={`fatigue-fill ${homeBand}`} style={{ width: `${homeEnergy}%` }} />
-        </div>
-        <span className="fatigue-energy-word">Energy</span>
-        <div className="fatigue-bar">
-          <div className={`fatigue-fill ${awayBand}`} style={{ width: `${awayEnergy}%` }} />
-        </div>
-        <span className={`fatigue-label ${awayBand}`}>{awayEnergy}</span>
-      </div>
-    </>
+      <EnergyPill value={awayEnergy} band={energyBand(awayEnergy)} />
+
+      <span className="match-row__favorite">☆</span>
+    </Link>
   );
 }
 
-function buildMiniStandings(
-  matches: MatchRecord[],
-  teamMap: Map<string, TeamRecord>
-) {
-  return buildSeasonStandings(matches, teamMap);
+function EnergyPill({
+  value,
+  band,
+}: {
+  value: number;
+  band: ReturnType<typeof energyBand>;
+}) {
+  return <span className={`energy-pill energy-pill--${band}`}>{value}</span>;
 }
 
 function selectedDateLabel(date: Date, locale: "zh" | "en") {
@@ -480,18 +431,21 @@ function selectedDateLabel(date: Date, locale: "zh" | "en") {
     return locale === "zh" ? "明天" : "Tomorrow";
   }
 
+  return locale === "zh" ? "比赛日" : "Matchday";
+}
+
+function selectedDateMeta(date: Date, locale: "zh" | "en") {
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+    weekday: locale === "zh" ? "short" : "long",
+    year: "numeric",
     month: locale === "zh" ? "numeric" : "short",
     day: "numeric",
   }).format(date);
 }
 
-function selectedDateMeta(date: Date, locale: "zh" | "en") {
+function dateStripWeekday(date: Date, locale: "zh" | "en") {
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
     weekday: "short",
-    month: locale === "zh" ? "numeric" : "short",
-    day: "numeric",
-    year: "numeric",
   }).format(date);
 }
 
@@ -505,41 +459,56 @@ function filterModeLabel(mode: "all" | "following" | "time", locale: "zh" | "en"
   return locale === "zh" ? "开球时间" : "By kickoff";
 }
 
-function buildWeekdayLabels(locale: "zh" | "en") {
-  const formatter = new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
-    weekday: "short",
-  });
-  const base = new Date(Date.UTC(2026, 2, 1));
-
-  return Array.from({ length: 7 }, (_, index) => {
-    const day = new Date(base);
-    day.setUTCDate(base.getUTCDate() + index);
-    return formatter.format(day);
-  });
+function buildVisibleDates(center: Date) {
+  return Array.from({ length: 11 }, (_, index) => addDays(center, index - 3));
 }
 
-function buildCalendarDays(viewMonth: Date) {
-  const first = startOfMonth(viewMonth);
-  const gridStart = addDays(first, -first.getDay());
+function buildCompetitionGroups(matches: MatchRecord[], competitions: CompetitionRecord[]) {
+  const competitionById = new Map(competitions.map((item) => [item.id, item]));
+  const grouped = new Map<string, MatchRecord[]>();
+  const order = new Map<string, number>(TOP_LEAGUE_IDS.map((item, index) => [item, index]));
 
-  return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+  for (const match of matches) {
+    const existing = grouped.get(match.competitionId) ?? [];
+    existing.push(match);
+    grouped.set(match.competitionId, existing);
+  }
+
+  return [...grouped.entries()]
+    .sort(([left], [right]) => {
+      const leftOrder = order.get(left) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = order.get(right) ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return left.localeCompare(right);
+    })
+    .map(([competitionId, groupedMatches]) => {
+      const competition = competitionById.get(competitionId);
+      if (!competition) {
+        return null;
+      }
+
+      return {
+        dateKey: `${competitionId}-${groupedMatches[0]?.id ?? "empty"}`,
+        competition,
+        matches: groupedMatches.sort((left, right) => left.startsAt.localeCompare(right.startsAt)),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
 }
 
-function monthLabel(date: Date, locale: "zh" | "en") {
-  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
-    month: "long",
-    year: "numeric",
-  }).format(date);
+function fixtureStatusWeight(match: MatchRecord) {
+  const label = fixtureStatusLabel(match).toUpperCase();
+  if (label === "LIVE") return 0;
+  if (label === "FT") return 1;
+  return 2;
 }
 
 function findInitialSelectedDate(matches: MatchRecord[]) {
   const today = startOfDay(new Date());
   void matches;
   return today;
-}
-
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
 function startOfDay(date: Date) {
@@ -552,10 +521,6 @@ function addDays(date: Date, amount: number) {
   return startOfDay(next);
 }
 
-function addMonths(date: Date, amount: number) {
-  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
-}
-
 function toDateKey(date: Date) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -566,11 +531,14 @@ function toDateKey(date: Date) {
 function matchDateKey(startsAt: string) {
   const date = new Date(startsAt);
 
-  // Football matchdays often roll past midnight locally, so keep very early
-  // kickoffs grouped under the previous matchday.
   if (date.getHours() < 6) {
     date.setDate(date.getDate() - 1);
   }
 
   return toDateKey(date);
+}
+
+function matchTimeLabel(kickoffLabel: string) {
+  const time = kickoffLabel.match(/\b\d{1,2}:\d{2}(?:\s?[AP]M)?\b/i)?.[0];
+  return time ?? kickoffLabel;
 }

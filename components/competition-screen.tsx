@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 import { EntityMark } from "@/components/entity-mark";
+import { computeTeamTFI, scheduleContextFromMatchSide } from "@/lib/fatigue-model";
 import {
   buildSeasonStandings,
   fixtureScoreLabel,
@@ -11,20 +12,21 @@ import {
 } from "@/lib/match-logic";
 import { useAppPreferences } from "@/components/preferences-provider";
 import { translateText } from "@/lib/i18n";
-import { energyBand, energyScore, formatDistance } from "@/lib/sonar";
-import type { CompetitionRecord, MatchRecord, NewsItem, Result, TeamRecord } from "@/lib/types";
+import { energyBand, formatDistance } from "@/lib/sonar";
+import type { CompetitionRecord, MatchRecord, NewsItem, PlayerProfile, Result, TeamRecord } from "@/lib/types";
 
 type CompetitionTab =
   | "standings"
   | "matches"
   | "fatigue"
   | "stats"
+  | "scorers"
   | "overview"
   | "knockout"
   | "fixtures"
   | "news";
 
-const LEAGUE_TABS: CompetitionTab[] = ["standings", "matches", "fatigue", "stats"];
+const LEAGUE_TABS: CompetitionTab[] = ["standings", "matches", "scorers", "stats", "fatigue"];
 const CUP_TABS: CompetitionTab[] = ["overview", "knockout", "fixtures", "stats", "news"];
 
 export function CompetitionScreen({
@@ -32,21 +34,53 @@ export function CompetitionScreen({
   matches,
   newsItems,
   teams,
+  players,
 }: {
   competition: CompetitionRecord;
   matches: MatchRecord[];
   newsItems: NewsItem[];
   teams: TeamRecord[];
+  players: PlayerProfile[];
 }) {
   const { locale } = useAppPreferences();
   const isCup = competition.id === "champions-league";
   const tabs = isCup ? CUP_TABS : LEAGUE_TABS;
   const [activeTab, setActiveTab] = useState<CompetitionTab>(tabs[0]);
   const teamMap = new Map(teams.map((team) => [team.id, team]));
+  const playersByTeam = useMemo(() => {
+    const map = new Map<string, PlayerProfile[]>();
+    for (const player of players) {
+      map.set(player.teamId, [...(map.get(player.teamId) ?? []), player]);
+    }
+    return map;
+  }, [players]);
   const orderedMatches = [...matches].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  const tableRows = buildCompetitionRows(orderedMatches, teamMap);
+  const tableRows = buildCompetitionRows(orderedMatches, teamMap, playersByTeam);
   const featuredNews = newsItems.slice(0, 4);
   const seasonLabel = "2025/26";
+  const competitionTeamIds = useMemo(
+    () => new Set(orderedMatches.flatMap((match) => [match.home.teamId, match.away.teamId])),
+    [orderedMatches]
+  );
+  const competitionPlayers = useMemo(
+    () => players.filter((player) => competitionTeamIds.has(player.teamId)),
+    [competitionTeamIds, players]
+  );
+  const scorerLeaders = useMemo(
+    () => buildPlayerLeaderboard(competitionPlayers, teams, "goals"),
+    [competitionPlayers, teams]
+  );
+  const assistLeaders = useMemo(
+    () => buildPlayerLeaderboard(competitionPlayers, teams, "assists"),
+    [competitionPlayers, teams]
+  );
+  const ratingLeaders = useMemo(
+    () => buildPlayerLeaderboard(competitionPlayers, teams, "rating"),
+    [competitionPlayers, teams]
+  );
+  const averageEnergy = tableRows.length
+    ? Math.round(tableRows.reduce((sum, row) => sum + row.energy, 0) / tableRows.length)
+    : 0;
 
   return (
     <div className="content-page">
@@ -64,6 +98,19 @@ export function CompetitionScreen({
               {orderedMatches[0] ? ` · ${orderedMatches[0].stage}` : ""}
             </div>
           </div>
+          <div className="league-page-header__actions">
+            <button type="button" className="league-page-header__season">
+              {seasonLabel} ▾
+            </button>
+            <div className="league-fatigue-overview">
+              <span className="league-fatigue-overview__label">
+                {locale === "zh" ? "联赛平均 TFI" : "League avg TFI"}
+              </span>
+              <strong className={`league-fatigue-overview__value league-fatigue-overview__value--${energyBand(averageEnergy)}`}>
+                {averageEnergy}
+              </strong>
+            </div>
+          </div>
         </div>
 
         <div className="match-tabs">
@@ -76,7 +123,7 @@ export function CompetitionScreen({
               }`}
               onClick={() => setActiveTab(tab)}
             >
-              {competitionTabLabel(tab)}
+              {competitionTabLabel(tab, locale)}
             </button>
           ))}
         </div>
@@ -99,30 +146,43 @@ export function CompetitionScreen({
           {!isCup && activeTab === "matches" ? (
             <div className="simple-stack">
               <SectionLead
-                title={locale === "zh" ? "Matches" : "Matches"}
+                title={locale === "zh" ? "比赛" : "Fixtures"}
                 note={
                   locale === "zh"
-                    ? "比赛列表沿用首页的行式结构，能量条只作为第二层辅助信息。"
-                    : "Fixtures keep the same row rhythm as the homepage, with energy shown as a secondary signal."
+                    ? "赛程页按轮次分组，行式结构保持和首页一致。"
+                    : "Fixtures stay grouped by round and reuse the same row rhythm as the homepage."
                 }
               />
+              <div className="filter-chip-row">
+                <button type="button" className="filter-chip active">
+                  {locale === "zh" ? "全部轮次" : "All rounds"}
+                </button>
+                <button type="button" className="filter-chip">
+                  {orderedMatches[0]?.stage ?? (locale === "zh" ? "当前轮次" : "Current round")}
+                </button>
+                <button type="button" className="filter-chip">
+                  {locale === "zh" ? "下一轮" : "Next round"}
+                </button>
+              </div>
               {orderedMatches.length ? (
-                <div className="league-group">
-                  <div className="league-group-header">
-                    <EntityMark
-                      value={competition.icon}
-                      label={translateText(competition.name, locale)}
-                      className="league-icon league-icon--small"
-                    />
-                    <span>{translateText(competition.name, locale)}</span>
-                  </div>
-                  {orderedMatches.map((match) => (
-                    <CompetitionMatchRow
-                      key={match.id}
-                      match={match}
-                      homeTeam={teamMap.get(match.home.teamId)}
-                      awayTeam={teamMap.get(match.away.teamId)}
-                    />
+                <div className="simple-stack">
+                  {groupMatchesByStage(orderedMatches).map((group) => (
+                    <div className="simple-stack" key={group.stage}>
+                      <div className="competition-group-title">{group.stage}</div>
+                      <div className="competition-match-list">
+                        {group.matches.map((match, index) => (
+                          <CompetitionMatchRow
+                            key={match.id}
+                            match={match}
+                            homeTeam={teamMap.get(match.home.teamId)}
+                            awayTeam={teamMap.get(match.away.teamId)}
+                            homePlayers={playersByTeam.get(match.home.teamId) ?? []}
+                            awayPlayers={playersByTeam.get(match.away.teamId) ?? []}
+                            rounded={resolveRoundedState(index, group.matches.length)}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -177,17 +237,76 @@ export function CompetitionScreen({
           {!isCup && activeTab === "stats" ? (
             <div className="simple-stack">
               <SectionLead
-                title={locale === "zh" ? "Stats" : "Stats"}
+                title={locale === "zh" ? "数据" : "Stats"}
                 note={
                   locale === "zh"
-                    ? "用更少的卡片概括当前联赛的恢复和旅行负荷信号。"
-                    : "A compact stat summary for the league's recovery and travel signals."
+                    ? "统计页保持 FotMob 式卡片加排行条的节奏，当前先展示能量、阵容和旅行三个维度。"
+                    : "Stats stay in a FotMob-like summary-plus-rankings rhythm, currently focused on energy, squad and travel."
                 }
               />
-              <div className="info-grid info-grid--three">
-                {buildLeagueStats(tableRows, locale).map((item) => (
-                  <InfoCard key={item.title} title={item.title} body={item.body} />
+              <div className="summary-metric-grid summary-metric-grid--four">
+                {buildLeagueSummaryMetrics(tableRows, locale).map((item) => (
+                  <SummaryMetric key={item.title} title={item.title} value={item.value} note={item.note} />
                 ))}
+              </div>
+              <div className="filter-chip-row">
+                <button type="button" className="filter-chip active">
+                  {locale === "zh" ? "能量" : "Energy"}
+                </button>
+                <button type="button" className="filter-chip">
+                  {locale === "zh" ? "阵容" : "Squad"}
+                </button>
+                <button type="button" className="filter-chip">
+                  {locale === "zh" ? "旅行" : "Travel"}
+                </button>
+              </div>
+              <RankingBars rows={tableRows} locale={locale} />
+            </div>
+          ) : null}
+
+          {!isCup && activeTab === "scorers" ? (
+            <div className="simple-stack">
+              <SectionLead
+                title={locale === "zh" ? "射手榜" : "Top scorers"}
+                note={
+                  locale === "zh"
+                    ? "先用当前赛季球员累计指标做前端榜单，后面可以再切到更精确的联赛级聚合。"
+                    : "For now this uses season player aggregates in the UI and can switch to exact competition totals later."
+                }
+              />
+              <div className="summary-metric-grid summary-metric-grid--three">
+                <SummaryMetric
+                  title={locale === "zh" ? "最多进球" : "Top scorer"}
+                  value={`${scorerLeaders[0]?.value ?? 0}`}
+                  note={scorerLeaders[0]?.player.name ?? (locale === "zh" ? "暂无" : "TBD")}
+                />
+                <SummaryMetric
+                  title={locale === "zh" ? "最多助攻" : "Top assists"}
+                  value={`${assistLeaders[0]?.value ?? 0}`}
+                  note={assistLeaders[0]?.player.name ?? (locale === "zh" ? "暂无" : "TBD")}
+                />
+                <SummaryMetric
+                  title={locale === "zh" ? "最高评分" : "Top rating"}
+                  value={ratingLeaders[0]?.displayValue ?? "--"}
+                  note={ratingLeaders[0]?.player.name ?? (locale === "zh" ? "暂无" : "TBD")}
+                />
+              </div>
+              <div className="info-grid info-grid--three">
+                <LeaderboardCard
+                  title={locale === "zh" ? "进球" : "Goals"}
+                  rows={scorerLeaders}
+                  locale={locale}
+                />
+                <LeaderboardCard
+                  title={locale === "zh" ? "助攻" : "Assists"}
+                  rows={assistLeaders}
+                  locale={locale}
+                />
+                <LeaderboardCard
+                  title={locale === "zh" ? "评分" : "Rating"}
+                  rows={ratingLeaders}
+                  locale={locale}
+                />
               </div>
             </div>
           ) : null}
@@ -252,6 +371,8 @@ export function CompetitionScreen({
                         match={match}
                         homeTeam={teamMap.get(match.home.teamId)}
                         awayTeam={teamMap.get(match.away.teamId)}
+                        homePlayers={playersByTeam.get(match.home.teamId) ?? []}
+                        awayPlayers={playersByTeam.get(match.away.teamId) ?? []}
                         compact
                       />
                     ))}
@@ -277,6 +398,8 @@ export function CompetitionScreen({
                   match={match}
                   homeTeam={teamMap.get(match.home.teamId)}
                   awayTeam={teamMap.get(match.away.teamId)}
+                  homePlayers={playersByTeam.get(match.home.teamId) ?? []}
+                  awayPlayers={playersByTeam.get(match.away.teamId) ?? []}
                 />
               ))}
             </div>
@@ -370,6 +493,8 @@ function StandingsTable({
           <th>W</th>
           <th>D</th>
           <th>L</th>
+          <th>GF</th>
+          <th>GA</th>
           <th>GD</th>
           <th>Pts</th>
           <th>Form</th>
@@ -397,6 +522,8 @@ function StandingsTable({
             <td>{row.wins}</td>
             <td>{row.draws}</td>
             <td>{row.losses}</td>
+            <td>{row.goalsFor}</td>
+            <td>{row.goalsAgainst}</td>
             <td>{row.goalDiff > 0 ? `+${row.goalDiff}` : row.goalDiff}</td>
             <td>{row.points}</td>
             <td>
@@ -423,22 +550,34 @@ function CompetitionMatchRow({
   match,
   homeTeam,
   awayTeam,
+  homePlayers,
+  awayPlayers,
   compact = false,
+  rounded = "single",
 }: {
   match: MatchRecord;
   homeTeam?: TeamRecord;
   awayTeam?: TeamRecord;
+  homePlayers: PlayerProfile[];
+  awayPlayers: PlayerProfile[];
   compact?: boolean;
+  rounded?: "top" | "middle" | "bottom" | "single";
 }) {
   if (!homeTeam || !awayTeam) {
     return null;
   }
 
-  const homeEnergy = energyScore(match.home.fatigue);
-  const awayEnergy = energyScore(match.away.fatigue);
+  const homeEnergy = computeTeamTFI(homePlayers, {
+    scheduleContext: scheduleContextFromMatchSide(match, match.home, false),
+  }).energy;
+  const awayEnergy = computeTeamTFI(awayPlayers, {
+    scheduleContext: scheduleContextFromMatchSide(match, match.away, true),
+  }).energy;
 
   return (
-    <div className={`competition-match-card${compact ? " competition-match-card--compact" : ""}`}>
+    <div
+      className={`competition-match-card${compact ? " competition-match-card--compact" : ""} competition-match-card--${rounded}`}
+    >
       <Link href={`/match/${match.slug}`} className="match-row">
         <span className="match-time">{fixtureStatusLabel(match)}</span>
         <span className="team-name home">
@@ -504,7 +643,130 @@ function InfoCard({
   );
 }
 
-function competitionTabLabel(tab: CompetitionTab) {
+type LeaderboardMetric = "goals" | "assists" | "rating";
+
+type LeaderboardRow = {
+  player: PlayerProfile;
+  team?: TeamRecord;
+  value: number;
+  displayValue: string;
+};
+
+function LeaderboardCard({
+  title,
+  rows,
+  locale,
+}: {
+  title: string;
+  rows: LeaderboardRow[];
+  locale: "zh" | "en";
+}) {
+  if (!rows.length) {
+    return (
+      <div className="info-card">
+        <div className="info-card__title">{title}</div>
+        <div className="flat-empty">
+          {locale === "zh" ? "榜单数据同步后会显示在这里。" : "Leaderboard data will appear here once synced."}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="info-card">
+      <div className="info-card__title">{title}</div>
+      <div className="leaderboard-list">
+        {rows.slice(0, 5).map((row, index) => (
+          <Link href={`/player/${row.player.slug}`} className="leaderboard-row" key={`${title}-${row.player.slug}`}>
+            <span className="leaderboard-row__index">{index + 1}</span>
+            <span className="leaderboard-row__identity">
+              <span className="leaderboard-row__avatar">
+                {row.player.photo ? (
+                  <img src={row.player.photo} alt={row.player.name} />
+                ) : (
+                  playerInitials(row.player.name)
+                )}
+              </span>
+              <span className="leaderboard-row__copy">
+                <span className="leaderboard-row__name">{row.player.name}</span>
+                <span className="leaderboard-row__meta">
+                  {row.team?.name ?? (locale === "zh" ? "球队待定" : "Team TBD")}
+                </span>
+              </span>
+            </span>
+            <strong className="leaderboard-row__value">{row.displayValue}</strong>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function buildPlayerLeaderboard(
+  players: PlayerProfile[],
+  teams: TeamRecord[],
+  metric: LeaderboardMetric
+) {
+  const teamById = new Map(teams.map((team) => [team.id, team]));
+
+  return players
+    .map((player) => {
+      const value =
+        metric === "goals"
+          ? player.seasonGoals ?? 0
+          : metric === "assists"
+            ? player.seasonAssists ?? 0
+            : player.averageRating ?? 0;
+
+      return {
+        player,
+        team: teamById.get(player.teamId),
+        value,
+        displayValue: metric === "rating" ? value.toFixed(1) : `${Math.round(value)}`,
+      };
+    })
+    .filter((row) => row.value > 0)
+    .sort(
+      (left, right) =>
+        right.value - left.value ||
+        (right.player.appearancesCount ?? 0) - (left.player.appearancesCount ?? 0) ||
+        left.player.name.localeCompare(right.player.name)
+    );
+}
+
+function playerInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .toUpperCase();
+}
+
+function competitionTabLabel(tab: CompetitionTab, locale: "zh" | "en") {
+  if (locale === "zh") {
+    switch (tab) {
+      case "standings":
+        return "积分榜";
+      case "matches":
+        return "比赛";
+      case "fatigue":
+        return "疲劳排名";
+      case "stats":
+        return "数据";
+      case "scorers":
+        return "射手榜";
+      case "overview":
+        return "Overview";
+      case "knockout":
+        return "Knockout";
+      case "fixtures":
+        return "Fixtures";
+      case "news":
+        return "News";
+    }
+  }
+
   switch (tab) {
     case "standings":
       return "Standings";
@@ -514,6 +776,8 @@ function competitionTabLabel(tab: CompetitionTab) {
       return "Fatigue Rankings";
     case "stats":
       return "Stats";
+    case "scorers":
+      return "Top Scorers";
     case "overview":
       return "Overview";
     case "knockout":
@@ -532,6 +796,8 @@ type CompetitionRow = {
   draws: number;
   losses: number;
   points: number;
+  goalsFor: number;
+  goalsAgainst: number;
   goalDiff: number;
   form: Result[];
   energy: number;
@@ -541,7 +807,8 @@ type CompetitionRow = {
 
 function buildCompetitionRows(
   matches: MatchRecord[],
-  teamMap: Map<string, TeamRecord>
+  teamMap: Map<string, TeamRecord>,
+  playersByTeam: Map<string, PlayerProfile[]>
 ): CompetitionRow[] {
   const standings = buildSeasonStandings(matches, teamMap);
   const latestByTeam = new Map<string, MatchRecord["home"] | MatchRecord["away"]>();
@@ -559,45 +826,60 @@ function buildCompetitionRows(
 
   return standings.map((row) => {
     const latest = latestByTeam.get(row.team.id);
+    const latestMatch = [...matches]
+      .sort((left, right) => right.startsAt.localeCompare(left.startsAt))
+      .find((match) => match.home.teamId === row.team.id || match.away.teamId === row.team.id);
+    const latestContext =
+      latestMatch == null
+        ? null
+        : latestMatch.home.teamId === row.team.id
+          ? scheduleContextFromMatchSide(latestMatch, latestMatch.home, false)
+          : scheduleContextFromMatchSide(latestMatch, latestMatch.away, true);
+    const teamModel = computeTeamTFI(playersByTeam.get(row.team.id) ?? [], {
+      scheduleContext: latestContext,
+    });
     return {
       ...row,
       form: row.form,
-      energy: latest ? energyScore(latest.fatigue) : 50,
+      goalsFor: row.goalsFor,
+      goalsAgainst: row.goalsAgainst,
+      energy: teamModel.energy,
       availability: latest?.squadAvailability ?? 0,
       travelKm: latest?.travelKm ?? 0,
     };
   });
 }
 
-function buildLeagueStats(rows: CompetitionRow[], locale: "zh" | "en") {
+function buildLeagueSummaryMetrics(rows: CompetitionRow[], locale: "zh" | "en") {
+  const averageEnergy = rows.length
+    ? Math.round(rows.reduce((sum, row) => sum + row.energy, 0) / rows.length)
+    : 0;
+  const averageAvailability = rows.length
+    ? Math.round(rows.reduce((sum, row) => sum + row.availability, 0) / rows.length)
+    : 0;
+  const highestTravel = rows.length ? Math.max(...rows.map((row) => row.travelKm)) : 0;
   const freshest = rows.slice().sort((a, b) => b.energy - a.energy)[0];
-  const heaviest = rows.slice().sort((a, b) => a.energy - b.energy)[0];
-  const cleanestTravel = rows.slice().sort((a, b) => a.travelKm - b.travelKm)[0];
 
   return [
     {
-      title: locale === "zh" ? "Freshest Squad" : "Freshest Squad",
-      body: freshest
-        ? `${freshest.team.name} · ${freshest.energy} energy`
-        : locale === "zh"
-          ? "暂无数据"
-          : "No data",
+      title: locale === "zh" ? "平均能量" : "Avg energy",
+      value: `${averageEnergy}`,
+      note: locale === "zh" ? "联赛样本" : "league sample",
     },
     {
-      title: locale === "zh" ? "Highest Load" : "Highest Load",
-      body: heaviest
-        ? `${heaviest.team.name} · ${heaviest.energy} energy`
-        : locale === "zh"
-          ? "暂无数据"
-          : "No data",
+      title: locale === "zh" ? "平均阵容完整度" : "Avg availability",
+      value: `${averageAvailability}%`,
+      note: locale === "zh" ? "阵容可用率" : "squad availability",
     },
     {
-      title: locale === "zh" ? "Travel Light" : "Travel Light",
-      body: cleanestTravel
-        ? `${cleanestTravel.team.name} · ${formatDistance(cleanestTravel.travelKm)}`
-        : locale === "zh"
-          ? "暂无数据"
-          : "No data",
+      title: locale === "zh" ? "最高旅行负荷" : "Peak travel",
+      value: highestTravel ? formatDistance(highestTravel) : "—",
+      note: locale === "zh" ? "最近样本" : "recent sample",
+    },
+    {
+      title: locale === "zh" ? "当前最充沛" : "Freshest side",
+      value: freshest ? freshest.team.shortName : "—",
+      note: freshest ? `${freshest.energy} energy` : "—",
     },
   ];
 }
@@ -638,6 +920,56 @@ function groupMatchesByStage(matches: MatchRecord[]) {
     stage,
     matches: groupMatches,
   }));
+}
+
+function resolveRoundedState(index: number, total: number): "top" | "middle" | "bottom" | "single" {
+  if (total <= 1) {
+    return "single";
+  }
+  if (index === 0) {
+    return "top";
+  }
+  if (index === total - 1) {
+    return "bottom";
+  }
+  return "middle";
+}
+
+function RankingBars({
+  rows,
+  locale,
+}: {
+  rows: CompetitionRow[];
+  locale: "zh" | "en";
+}) {
+  const ordered = rows.slice().sort((left, right) => right.energy - left.energy).slice(0, 5);
+  const peak = ordered[0]?.energy ?? 1;
+
+  return (
+    <div className="simple-stack">
+      <div className="competition-group-title">
+        {locale === "zh" ? "球队能量排行" : "Team energy ranking"}
+      </div>
+      <div className="simple-stack">
+        {ordered.map((row, index) => (
+          <div className="ranking-bar-row" key={row.team.id}>
+            <span className="ranking-bar-row__index">{index + 1}</span>
+            <EntityMark value={row.team.badge} label={row.team.name} className="team-badge" />
+            <span className="ranking-bar-row__name">{row.team.name}</span>
+            <div className="ranking-bar-row__track">
+              <div
+                className="ranking-bar-row__fill"
+                style={{ width: `${(row.energy / peak) * 100}%` }}
+              />
+            </div>
+            <span className={`ranking-bar-row__value ranking-bar-row__value--${energyBand(row.energy)}`}>
+              {row.energy}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function resultTone(result: Result) {

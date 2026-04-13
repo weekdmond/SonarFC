@@ -25,6 +25,7 @@ export default async function CompetitionPage({
       matches={snapshot.matches.filter((item) => item.competitionId === competition.id)}
       newsItems={snapshot.newsItems.filter((item) => item.competitionIds.includes(competition.id))}
       teams={snapshot.teams}
+      players={snapshot.players}
     />
   );
 }

@@ -53,6 +53,7 @@ export interface FormationHealth {
 }
 
 export interface MatchSide {
+  sourceId?: number;
   teamId: string;
   fatigue: number;
   squadAvailability: number;
@@ -69,7 +70,63 @@ export interface MatchSide {
   formationHealth: FormationHealth;
 }
 
+export interface MatchTimelineEvent {
+  id: string;
+  minuteLabel: string;
+  teamId: string;
+  kind: "goal" | "card" | "substitution" | "var" | "other";
+  title: string;
+  detail?: string;
+  secondary?: string;
+}
+
+export interface MatchTeamStatLine {
+  label: LocalizedText;
+  home: string;
+  away: string;
+}
+
+export interface MatchPlayerPerformance {
+  playerId: number;
+  playerSlug: string;
+  teamId: string;
+  name: string;
+  position: string;
+  jerseyNumber: number | null;
+  minutesPlayed: number;
+  isStarter: boolean;
+  subbedInAt: number | null;
+  subbedOutAt: number | null;
+  rating: number | null;
+  goals: number;
+  assists: number;
+  shotsTotal: number | null;
+  shotsOn: number | null;
+  passesTotal: number | null;
+  passesAccuracy: number | null;
+  tackles: number | null;
+  interceptions: number | null;
+  duelsWon: number | null;
+  duelsTotal: number | null;
+  dribblesSuccess: number | null;
+  dribblesAttempts: number | null;
+  foulsDrawn: number | null;
+  foulsCommitted: number | null;
+  yellowCards: number;
+  redCards: number;
+  saves: number | null;
+  isCaptain: boolean;
+}
+
+export interface MatchPostgameData {
+  timeline: MatchTimelineEvent[];
+  teamStats: MatchTeamStatLine[];
+  homePlayers: MatchPlayerPerformance[];
+  awayPlayers: MatchPlayerPerformance[];
+}
+
 export interface MatchRecord {
+  sourceId?: number;
   id: string;
   slug: string;
   bucket: MatchBucket;
@@ -86,6 +143,7 @@ export interface MatchRecord {
   verdict: LocalizedText;
   spotlight: LocalizedText;
   featuredPlayerSlug: string;
+  postgame?: MatchPostgameData | null;
 }
 
 export interface NewsItem {
@@ -127,6 +185,11 @@ export interface PlayerProfile {
   last14Minutes: number;
   seasonMinutes: number;
   appearancesCount?: number;
+  averageRating?: number | null;
+  seasonGoals?: number;
+  seasonAssists?: number;
+  seasonYellowCards?: number;
+  seasonRedCards?: number;
   startsLast5: number;
   nextFixture: string;
   summary: LocalizedText;

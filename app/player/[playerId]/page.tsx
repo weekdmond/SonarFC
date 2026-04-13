@@ -17,5 +17,14 @@ export default async function PlayerPage({
     notFound();
   }
 
-  return <PlayerScreen player={player} teams={snapshot.teams} />;
+  return (
+    <PlayerScreen
+      player={player}
+      teams={snapshot.teams}
+      competitions={snapshot.competitions}
+      matches={snapshot.matches.filter(
+        (item) => item.home.teamId === player.teamId || item.away.teamId === player.teamId
+      )}
+    />
+  );
 }

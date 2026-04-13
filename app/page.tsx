@@ -10,6 +10,7 @@ export default async function Page() {
     <HomeFeedScreen
       competitions={snapshot.competitions}
       teams={snapshot.teams}
+      players={snapshot.players}
       matches={snapshot.matches}
       newsItems={snapshot.newsItems}
     />

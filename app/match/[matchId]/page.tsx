@@ -3,15 +3,14 @@ export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 
 import { MatchDetailScreen } from "@/components/match-detail-screen";
-import { getSiteSnapshot } from "@/lib/site-data";
+import { getMatchPageData } from "@/lib/site-data";
 
 export default async function MatchPage({
   params,
 }: {
   params: { matchId: string };
 }) {
-  const snapshot = await getSiteSnapshot();
-  const match = snapshot.matches.find((item) => item.slug === params.matchId);
+  const { snapshot, match } = await getMatchPageData(params.matchId);
 
   if (!match) {
     notFound();
@@ -23,6 +22,8 @@ export default async function MatchPage({
       matches={snapshot.matches}
       competitions={snapshot.competitions}
       teams={snapshot.teams}
+      homePlayers={snapshot.players.filter((item) => item.teamId === match.home.teamId)}
+      awayPlayers={snapshot.players.filter((item) => item.teamId === match.away.teamId)}
     />
   );
 }

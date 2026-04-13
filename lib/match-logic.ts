@@ -7,6 +7,8 @@ export interface StandingsSnapshot {
   losses: number;
   played: number;
   points: number;
+  goalsFor: number;
+  goalsAgainst: number;
   goalDiff: number;
   form: Result[];
 }
@@ -28,6 +30,8 @@ export function buildSeasonStandings(
       losses: number;
       played: number;
       points: number;
+      goalsFor: number;
+      goalsAgainst: number;
       goalDiff: number;
       form: Array<{ startsAt: string; result: Result }>;
     }
@@ -50,8 +54,8 @@ export function buildSeasonStandings(
     const homeResult = scoreResult(match.homeScore, match.awayScore);
     const awayResult = scoreResult(match.awayScore, match.homeScore);
 
-    applyResult(homeRow, homeResult, match.homeScore - match.awayScore, match.startsAt);
-    applyResult(awayRow, awayResult, match.awayScore - match.homeScore, match.startsAt);
+    applyResult(homeRow, homeResult, match.homeScore, match.awayScore, match.startsAt);
+    applyResult(awayRow, awayResult, match.awayScore, match.homeScore, match.startsAt);
 
     rows.set(homeTeam.id, homeRow);
     rows.set(awayTeam.id, awayRow);
@@ -104,6 +108,8 @@ function createStandingsRow(team: TeamRecord) {
     losses: 0,
     played: 0,
     points: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
     goalDiff: 0,
     form: [] as Array<{ startsAt: string; result: Result }>,
   };
@@ -112,11 +118,14 @@ function createStandingsRow(team: TeamRecord) {
 function applyResult(
   row: ReturnType<typeof createStandingsRow>,
   result: Result,
-  goalDiff: number,
+  goalsFor: number,
+  goalsAgainst: number,
   startsAt: string
 ) {
   row.played += 1;
-  row.goalDiff += goalDiff;
+  row.goalsFor += goalsFor;
+  row.goalsAgainst += goalsAgainst;
+  row.goalDiff += goalsFor - goalsAgainst;
   row.form.push({ startsAt, result });
 
   if (result === "W") {
